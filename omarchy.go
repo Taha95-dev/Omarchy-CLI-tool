@@ -345,21 +345,47 @@ app.listen(port, () => {
 })`
 	os.WriteFile(filepath.Join(path, "src/app.js"), []byte(appJS), 0644)
 }
-func gitSync(automessage bool, custommessage string) {
+func gitSync(autoMsg bool, customMsg string) {
 	if !isGitRepo() {
-		fmt.Println("Not a git repository. Skipping git sync.")
+		fmt.Println("❌ Not a git repository")
 		return
 	}
-	if hasGitChanges(".") {
-		message := custommessage
-		if message == "" && automessage {
-			message = fmt.Sprintf("Auto-commit: %s", time.Now().Format(time.RFC1123))
-		}
-		runCmd("git", "add", ".")
-		runCmd("git", "commit", "-m", message)
-		runCmd("git", "push")
-		fmt.Println("✅ Changes committed with message:", message)
+
+	if !hasGitChanges(".") {
+		fmt.Println("📝 No changes to commit")
+		return
 	}
+
+	// Add changes
+	runCmd("git", "add", ".")
+
+	// Create commit message
+	message := customMsg
+	if message == "" && autoMsg {
+		message = fmt.Sprintf("Auto-sync: %s", time.Now().Format("2006-01-02 15:04:05"))
+	}
+	if message == "" && !autoMsg {
+		message = "Sync via Omarchy"
+	}
+
+	// Commit
+	runCmd("git", "commit", "-m", message)
+	fmt.Println("✅ Committed:", message)
+
+	// Check if remote exists before pushing
+	if hasRemote() {
+		runCmd("git", "push")
+		fmt.Println("✅ Pushed to remote")
+	} else {
+		fmt.Println("⚠️ No remote configured. Commit saved locally only.")
+		fmt.Println("   Run: git remote add origin <url>")
+	}
+}
+
+func hasRemote() bool {
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	err := cmd.Run()
+	return err == nil
 }
 func isGitRepo() bool {
 	return exec.Command("git", "-C", ".", "rev-parse", "--is-inside-work-tree").Run() == nil
