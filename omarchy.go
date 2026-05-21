@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -23,9 +24,21 @@ func main() {
 	if backendType == "" {
 		backendType = "node"
 	}
-	if len(os.Args) > 1 && os.Args[1] == "sync" {
-		handleGitSync()
-		return
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "sync":
+			handleGitSync()
+			return
+		case "doctor":
+			runDoctor()
+			return
+		case "count":
+			handleCountCommand()
+			return
+		case "version", "--version":
+			fmt.Println("Omarchy v0.2.0")
+			return
+		}
 	}
 	// Define flags with config defaults
 	projectType := flag.String("type", defaultType, "Project type: web, cli, lib, fullstack")
@@ -416,7 +429,113 @@ func runCmd(name string, args ...string) {
 		fmt.Println("⚠️ Warning:", err)
 	}
 }
+func runDoctor() {
+	fmt.Println("🔍 Omarchy Environment Check")
+
+	// Check tools
+	CheckTool("node", "--version")
+	CheckTool("go", "version")
+	CheckTool("git", "--version")
+	CheckTool("npm", "--version")
+
+	// Check config
+	configPath := getConfigPath()
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Println("✅ Omarchy config found at:", configPath)
+	} else {
+		fmt.Println("⚠️ Omarchy config not found (run: omarchy config init)")
+	}
+
+	// Check Git config
+	fmt.Println("\n📋 Git Configuration:")
+	checkGitConfig()
+}
+func getConfigPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".omarchy.yaml")
+}
+func checkGitConfig() {
+	// Check if git user.name is set
+	cmd := exec.Command("git", "config", "--global", "user.name")
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("⚠️ Git user.name not set (run: git config --global user.name \"Your Name\")")
+	} else {
+		fmt.Println("✅ Git user.name:", string(output))
+	}
+
+	// Check if git user.email is set
+	cmd = exec.Command("git", "config", "--global", "user.email")
+	output, err = cmd.Output()
+	if err != nil {
+		fmt.Println("⚠️ Git user.email not set (run: git config --global user.email \"you@example.com\")")
+	} else {
+		fmt.Println("✅ Git user.email:", string(output))
+	}
+}
+func checkGitRemote() {
+	// Check if remote origin exists
+	cmd := exec.Command("git", "remote", "get-url", "origin")
+	output, err := cmd.Output()
+	if err != nil {
+		fmt.Println("⚠️ No git remote configured (run: git remote add origin <url>)")
+	} else {
+		fmt.Println("✅ Remote origin:", string(output))
+	}
+}
+func CheckTool(tool string, versionFlag string) {
+	cmd := exec.Command(tool, versionFlag)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("❌ %s is not installed or not in PATH\n", tool)
+	} else {
+		// Extract version number
+		version := strings.TrimSpace(string(output))
+		fmt.Printf("✅ %s %s\n", tool, version)
+	}
+}
+func countAllFiles(suffix string) (int, error) {
+	// Remove leading dot if user added it
+	suffix = strings.TrimPrefix(suffix, ".")
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), "."+suffix) {
+			count++
+		}
+	}
+
+	return count, nil
+}
+func handleCountCommand() {
+	// Default to "go" if no suffix provided
+	suffix := "go"
+	if len(os.Args) > 2 {
+		suffix = os.Args[2]
+	}
+
+	count, err := countAllFiles(suffix)
+	if err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
+		return
+	}
+
+	// Pluralization
+	if count == 1 {
+		fmt.Printf("📁 Found 1 .%s file\n", suffix)
+	} else {
+		fmt.Printf("📁 Found %d .%s files\n", count, suffix)
+	}
+}
 func saveTemplates(name string, content string) {
-	//future implementaion (e.g. save to ~/.omarchy/templates/)
+	//future implementation (e.g. save to ~/.omarchy/templates/)
 	//someday
 }
