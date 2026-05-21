@@ -362,15 +362,37 @@ app.listen(port, () => {
 	os.WriteFile(filepath.Join(path, "src/app.js"), []byte(appJS), 0644)
 }
 func gitSync(autoMsg bool, customMsg string) {
-	if !isGitRepo() {
-		fmt.Println("❌ Not a git repository")
+	if !isGitInstalled() {
+		printError("Git is not installed or not in PATH")
+		printInfo("Install Git from: https://git-scm.com")
 		return
 	}
 
-	if !hasGitChanges(".") {
-		fmt.Println("📝 No changes to commit")
+	// Check 2: In a git repo?
+	inRepo, err := isGitRepo()
+	if err != nil {
+		printError(err.Error())
 		return
 	}
+	if !inRepo {
+		printError("Not in a git repository")
+		printInfo("Run: git init")
+		return
+	}
+
+	// Check 3: Any changes?
+	if !hasGitChanges(".") {
+		printInfo("No changes to commit")
+		return
+	}
+
+	// Check 4: Git user configured?
+	userName, userEmail, err := checkGitConfig()
+	if err != nil {
+		printError("Git user not configured")
+		return
+	}
+	fmt.Printf("✅ Git user: %s <%s>\n", userName, userEmail)
 
 	// Add changes
 	runCmd("git", "add", ".")
@@ -415,8 +437,21 @@ func handleGitSync() {
 func dryRunSync() {
 	fmt.Println("🔍 Dry run - what would happen:")
 
-	if !isGitRepo() {
-		fmt.Println("  ❌ Not a git repository")
+	if !isGitInstalled() {
+		printError("Git is not installed or not in PATH")
+		printInfo("Install Git from: https://git-scm.com")
+		return
+	}
+
+	// Check 2: In a git repo?
+	inRepo, err := isGitRepo()
+	if err != nil {
+		printError(err.Error())
+		return
+	}
+	if !inRepo {
+		printError("Not in a git repository")
+		printInfo("Run: git init")
 		return
 	}
 
@@ -438,16 +473,30 @@ func hasRemote() bool {
 	err := cmd.Run()
 	return err == nil
 }
-func isGitRepo() bool {
-	return exec.Command("git", "-C", ".", "rev-parse", "--is-inside-work-tree").Run() == nil
+func isGitInstalled() bool {
+	_, err := exec.LookPath("git")
+	return err == nil
+}
+
+func isGitRepo() (bool, error) {
+	if !isGitInstalled() {
+		return false, fmt.Errorf("git is not installed or not in PATH")
+	}
+
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	err := cmd.Run()
+	if err != nil {
+		return false, nil // Not a git repo (no error)
+	}
+	return true, nil
 }
 func hasGitChanges(path string) bool {
 	cmd := exec.Command("git", "-C", path, "status", "--porcelain")
 	output, err := cmd.Output()
 	if err != nil {
-		return false
+		return false // Assume no changes if git fails
 	}
-	return len(output) > 0
+	return len(output) > 0 // Has changes if output not empty
 }
 
 func runCmd(name string, args ...string) {
@@ -488,24 +537,19 @@ func getConfigPath() string {
 	}
 	return filepath.Join(homeDir, ".omarchy.yaml")
 }
-func checkGitConfig() {
-	// Check if git user.name is set
-	cmd := exec.Command("git", "config", "--global", "user.name")
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println("⚠️ Git user.name not set (run: git config --global user.name \"Your Name\")")
-	} else {
-		fmt.Println("✅ Git user.name:", string(output))
+func checkGitConfig() (string, string, error) {
+	nameCmd := exec.Command("git", "config", "--global", "user.name")
+	nameOutput, nameErr := nameCmd.Output()
+
+	emailCmd := exec.Command("git", "config", "--global", "user.email")
+	emailOutput, emailErr := emailCmd.Output()
+
+	if nameErr != nil || emailErr != nil {
+		return "", "", fmt.Errorf("git config not set")
 	}
 
-	// Check if git user.email is set
-	cmd = exec.Command("git", "config", "--global", "user.email")
-	output, err = cmd.Output()
-	if err != nil {
-		fmt.Println("⚠️ Git user.email not set (run: git config --global user.email \"you@example.com\")")
-	} else {
-		fmt.Println("✅ Git user.email:", string(output))
-	}
+	return strings.TrimSpace(string(nameOutput)),
+		strings.TrimSpace(string(emailOutput)), nil
 }
 func checkGitRemote() {
 	// Check if remote origin exists
@@ -634,6 +678,21 @@ func printTree(path string, prefix string) {
 			}
 		}
 	}
+}
+func printError(msg string) {
+	fmt.Println("❌", msg)
+}
+
+func printWarning(msg string) {
+	fmt.Println("⚠️", msg)
+}
+
+func printSuccess(msg string) {
+	fmt.Println("✅", msg)
+}
+
+func printInfo(msg string) {
+	fmt.Println("ℹ️", msg)
 }
 func saveTemplates(name string, content string) {
 	//future implementation (e.g. save to ~/.omarchy/templates/)
