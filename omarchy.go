@@ -13,6 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+var Version = "dev"
+
 func main() {
 	config := loadConfig()
 
@@ -43,6 +45,10 @@ func main() {
 			fmt.Println("Omarchy v0.2.0")
 			return
 		}
+	}
+	if len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version") {
+		fmt.Printf("Omarchy %s\n", Version)
+		return
 	}
 	// Define flags with config defaults
 	projectType := flag.String("type", defaultType, "Project type: web, cli, lib, fullstack")
