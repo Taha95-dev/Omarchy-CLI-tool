@@ -761,5 +761,4 @@ func printInfo(msg string) {
 }
 func saveTemplates(name string, content string) {
 	//future implementation (e.g. save to ~/.omarchy/templates/)
-	//someday or tomorrow
 }
