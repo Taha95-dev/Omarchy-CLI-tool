@@ -35,6 +35,9 @@ func main() {
 		case "count":
 			handleCountCommand()
 			return
+		case "tree":
+			handleTreeCommand()
+			return
 		case "version", "--version":
 			fmt.Println("Omarchy v0.2.0")
 			return
@@ -394,7 +397,42 @@ func gitSync(autoMsg bool, customMsg string) {
 		fmt.Println("   Run: git remote add origin <url>")
 	}
 }
+func handleGitSync() {
+	syncCmd := flag.NewFlagSet("sync", flag.ExitOnError)
+	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
+	message := syncCmd.String("m", "", "Commit message")
+	dryRun := syncCmd.Bool("dry-run", false, "Show what would happen without doing it")
+	syncCmd.Parse(os.Args[2:])
 
+	if *dryRun {
+		dryRunSync()
+		return
+	}
+
+	gitSync(*autoMsg, *message)
+}
+
+func dryRunSync() {
+	fmt.Println("🔍 Dry run - what would happen:")
+
+	if !isGitRepo() {
+		fmt.Println("  ❌ Not a git repository")
+		return
+	}
+
+	if hasGitChanges(".") {
+		fmt.Println("  ✅ Would add all changes")
+		fmt.Println("  ✅ Would commit with message: Auto-sync: <timestamp>")
+
+		if hasRemote() {
+			fmt.Println("  ✅ Would push to remote")
+		} else {
+			fmt.Println("  ⚠️ Would skip push (no remote)")
+		}
+	} else {
+		fmt.Println("  📝 No changes to commit")
+	}
+}
 func hasRemote() bool {
 	cmd := exec.Command("git", "remote", "get-url", "origin")
 	err := cmd.Run()
@@ -412,14 +450,6 @@ func hasGitChanges(path string) bool {
 	return len(output) > 0
 }
 
-func handleGitSync() {
-	syncCmd := flag.NewFlagSet("sync", flag.ExitOnError)
-	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
-	message := syncCmd.String("m", "", "Commit message")
-	syncCmd.Parse(os.Args[2:])
-
-	gitSync(*autoMsg, *message)
-}
 func runCmd(name string, args ...string) {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
@@ -437,6 +467,7 @@ func runDoctor() {
 	CheckTool("go", "version")
 	CheckTool("git", "--version")
 	CheckTool("npm", "--version")
+	CheckTool("docker", "--version")
 
 	// Check config
 	configPath := getConfigPath()
@@ -490,9 +521,12 @@ func CheckTool(tool string, versionFlag string) {
 	cmd := exec.Command(tool, versionFlag)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		fmt.Printf("❌ %s is not installed or not in PATH\n", tool)
+		if tool == "docker" {
+			fmt.Printf("⚠️ %s not installed (optional)\n", tool)
+		} else {
+			fmt.Printf("❌ %s is not installed or not in PATH\n", tool)
+		}
 	} else {
-		// Extract version number
 		version := strings.TrimSpace(string(output))
 		fmt.Printf("✅ %s %s\n", tool, version)
 	}
@@ -517,22 +551,88 @@ func countAllFiles(suffix string) (int, error) {
 }
 func handleCountCommand() {
 	// Default to "go" if no suffix provided
+	var recursive bool
 	suffix := "go"
-	if len(os.Args) > 2 {
-		suffix = os.Args[2]
+
+	// Simple flag parsing for count command
+	for i := 2; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "-r", "--recursive":
+			recursive = true
+		default:
+			suffix = os.Args[i]
+		}
 	}
 
-	count, err := countAllFiles(suffix)
+	var count int
+	var err error
+
+	if recursive {
+		count, err = countAllFilesRecursive(suffix)
+	} else {
+		count, err = countAllFiles(suffix)
+	}
+
 	if err != nil {
 		fmt.Printf("❌ Error: %v\n", err)
 		return
 	}
 
-	// Pluralization
 	if count == 1 {
 		fmt.Printf("📁 Found 1 .%s file\n", suffix)
 	} else {
 		fmt.Printf("📁 Found %d .%s files\n", count, suffix)
+	}
+}
+func countAllFilesRecursive(suffix string) (int, error) {
+	suffix = strings.TrimPrefix(suffix, ".")
+	count := 0
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), "."+suffix) {
+			count++
+		}
+		return nil
+	})
+
+	return count, err
+}
+func handleTreeCommand() {
+	root := "."
+	fmt.Printf("📂 Directory tree for: %s\n", root)
+	printTree(root, "")
+}
+func printTree(path string, prefix string) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		fmt.Printf("❌ Error reading directory: %v\n", err)
+		return
+	}
+	for i, entry := range entries {
+		// Skip hidden files/directories
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		isLast := i == len(entries)-1
+
+		// Determine connector
+		if isLast {
+			fmt.Printf("%s└── %s\n", prefix, entry.Name())
+			newPrefix := prefix + "    "
+			if entry.IsDir() {
+				printTree(filepath.Join(path, entry.Name()), newPrefix)
+			}
+		} else {
+			fmt.Printf("%s├── %s\n", prefix, entry.Name())
+			newPrefix := prefix + "│   "
+			if entry.IsDir() {
+				printTree(filepath.Join(path, entry.Name()), newPrefix)
+			}
+		}
 	}
 }
 func saveTemplates(name string, content string) {
