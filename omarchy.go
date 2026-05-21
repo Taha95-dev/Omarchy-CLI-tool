@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -509,6 +510,8 @@ func runCmd(name string, args ...string) {
 	}
 }
 func runDoctor() {
+	fmt.Printf("🖥️ Operating System: %s\n", getOS())
+	fmt.Printf("🏠 Home Directory: %s\n", getHomeDir())
 	fmt.Println("🔍 Omarchy Environment Check")
 
 	// Check tools
@@ -530,6 +533,10 @@ func runDoctor() {
 	fmt.Println("\n📋 Git Configuration:")
 	checkGitConfig()
 }
+func getHomeDir() string {
+	home, _ := os.UserHomeDir()
+	return home
+}
 func getConfigPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -545,11 +552,16 @@ func checkGitConfig() (string, string, error) {
 	emailOutput, emailErr := emailCmd.Output()
 
 	if nameErr != nil || emailErr != nil {
+		fmt.Println("⚠️ Git user.name or user.email not set")
+		fmt.Println("   Run: git config --global user.name \"Your Name\"")
+		fmt.Println("   Run: git config --global user.email \"you@example.com\"")
 		return "", "", fmt.Errorf("git config not set")
 	}
 
-	return strings.TrimSpace(string(nameOutput)),
-		strings.TrimSpace(string(emailOutput)), nil
+	userName := strings.TrimSpace(string(nameOutput))
+	userEmail := strings.TrimSpace(string(emailOutput))
+	fmt.Printf("✅ Git user: %s <%s>\n", userName, userEmail)
+	return userName, userEmail, nil
 }
 func checkGitRemote() {
 	// Check if remote origin exists
@@ -562,18 +574,47 @@ func checkGitRemote() {
 	}
 }
 func CheckTool(tool string, versionFlag string) {
-	cmd := exec.Command(tool, versionFlag)
+	cmdName := tool
+	displayName := tool
+
+	// OS-specific adjustments
+	switch runtime.GOOS {
+	case "windows":
+		switch tool {
+		case "node":
+			cmdName = "node.exe"
+		case "python":
+			cmdName = "python.exe"
+		case "go":
+			cmdName = "go.exe"
+		}
+	case "darwin": // macOS
+		// Usually fine
+	case "linux":
+		// Usually fine
+	}
+
+	cmd := exec.Command(cmdName, versionFlag)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if tool == "docker" {
-			fmt.Printf("⚠️ %s not installed (optional)\n", tool)
+			fmt.Printf("⚠️ %s not installed (optional)\n", displayName)
 		} else {
-			fmt.Printf("❌ %s is not installed or not in PATH\n", tool)
+			fmt.Printf("❌ %s not installed or not in PATH\n", displayName)
 		}
 	} else {
 		version := strings.TrimSpace(string(output))
-		fmt.Printf("✅ %s %s\n", tool, version)
+		// Clean up version string (remove extra spaces, newlines)
+		version = strings.Split(version, "\n")[0]
+		fmt.Printf("✅ %s %s\n", displayName, version)
 	}
+}
+
+// When writing files, use consistent line endings
+func writeFileContent(path, content string) error {
+	// Convert to Unix line endings (LF) for consistency
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	return os.WriteFile(path, []byte(content), 0644)
 }
 func countAllFiles(suffix string) (int, error) {
 	// Remove leading dot if user added it
@@ -677,6 +718,30 @@ func printTree(path string, prefix string) {
 				printTree(filepath.Join(path, entry.Name()), newPrefix)
 			}
 		}
+	}
+}
+func getOS() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "Windows"
+	case "darwin":
+		return "macOS"
+	case "linux":
+		return "Linux"
+	default:
+		return runtime.GOOS
+	}
+}
+func ConfigPath() string {
+	home, _ := os.UserHomeDir()
+
+	switch runtime.GOOS {
+	case "windows":
+		return filepath.Join(home, "AppData", "Roaming", ".omarchy.yaml")
+	case "darwin": // macOS
+		return filepath.Join(home, "Library", "Application Support", "omarchy.yaml")
+	default: // Linux and others
+		return filepath.Join(home, ".config", "omarchy.yaml")
 	}
 }
 func printError(msg string) {
