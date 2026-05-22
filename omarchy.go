@@ -96,7 +96,7 @@ func main() {
 			fmt.Println("Run 'omarchy help' for available commands")
 			return
 		case "version", "--version":
-			fmt.Println("Omarchy v0.2.0")
+			fmt.Println("Omarchy" + Version)
 			return
 		}
 	}
