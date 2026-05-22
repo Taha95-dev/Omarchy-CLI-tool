@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-var Version = "v1.10.0"
+var Version = "v1.11.0"
 
 func main() {
 	config := config.LoadConfig()
