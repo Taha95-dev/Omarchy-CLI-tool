@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -27,19 +29,36 @@ func main() {
 	if backendType == "" {
 		backendType = "node"
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Handle Ctrl+C
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	go func() {
+		<-sigChan
+		fmt.Println("\n⚠️ Interrupt received. Do you want to cancel? (y/N): ")
+		var resp string
+		fmt.Scanln(&resp)
+		if resp == "y" || resp == "Y" {
+			cancel()
+			fmt.Println("👋 Cancelling operation...")
+		} else {
+			fmt.Println("✅ Continuing...")
+		}
+	}()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "sync":
-			handleGitSync()
+			handleGitSync(ctx)
 			return
 		case "doctor":
-			runDoctor()
+			runDoctor(ctx)
 			return
 		case "count":
-			handleCountCommand()
+			handleCountCommand(ctx)
 			return
 		case "tree":
-			handleTreeCommand()
+			handleTreeCommand(ctx)
 			return
 		case "version", "--version":
 			fmt.Println("Omarchy v0.2.0")
@@ -368,7 +387,29 @@ app.listen(port, () => {
 })`
 	os.WriteFile(filepath.Join(path, "src/app.js"), []byte(appJS), 0644)
 }
-func gitSync(autoMsg bool, customMsg string) {
+func handleGitSync(ctx context.Context) {
+	syncCmd := flag.NewFlagSet("sync", flag.ExitOnError)
+	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
+	message := syncCmd.String("m", "", "Commit message")
+	dryRun := syncCmd.Bool("dry-run", false, "Show what would happen without doing it")
+	syncCmd.Parse(os.Args[2:])
+
+	if *dryRun {
+		dryRunSync(ctx)
+		return
+	}
+
+	gitSync(ctx, *autoMsg, *message)
+}
+
+func gitSync(ctx context.Context, autoMsg bool, customMsg string) {
+	select {
+	case <-ctx.Done():
+		fmt.Println("❌ Sync cancelled")
+		return
+	default:
+	}
+
 	if !isGitInstalled() {
 		printError("Git is not installed or not in PATH")
 		printInfo("Install Git from: https://git-scm.com")
@@ -426,22 +467,15 @@ func gitSync(autoMsg bool, customMsg string) {
 		fmt.Println("   Run: git remote add origin <url>")
 	}
 }
-func handleGitSync() {
-	syncCmd := flag.NewFlagSet("sync", flag.ExitOnError)
-	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
-	message := syncCmd.String("m", "", "Commit message")
-	dryRun := syncCmd.Bool("dry-run", false, "Show what would happen without doing it")
-	syncCmd.Parse(os.Args[2:])
 
-	if *dryRun {
-		dryRunSync()
+func dryRunSync(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		fmt.Println("❌ Dry run cancelled")
 		return
+	default:
 	}
 
-	gitSync(*autoMsg, *message)
-}
-
-func dryRunSync() {
 	fmt.Println("🔍 Dry run - what would happen:")
 
 	if !isGitInstalled() {
@@ -450,7 +484,6 @@ func dryRunSync() {
 		return
 	}
 
-	// Check 2: In a git repo?
 	inRepo, err := isGitRepo()
 	if err != nil {
 		printError(err.Error())
@@ -515,12 +548,19 @@ func runCmd(name string, args ...string) {
 		fmt.Println("⚠️ Warning:", err)
 	}
 }
-func runDoctor() {
+func runDoctor(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		fmt.Println("❌ Doctor check cancelled")
+		return
+	default:
+	}
+
 	fmt.Printf("🖥️ Operating System: %s\n", getOS())
 	fmt.Printf("🏠 Home Directory: %s\n", getHomeDir())
 	fmt.Println("🔍 Omarchy Environment Check")
 
-	// Check tools
+	// Check tools (these could also be made cancellable)
 	CheckTool("node", "--version")
 	CheckTool("go", "version")
 	CheckTool("git", "--version")
@@ -640,12 +680,10 @@ func countAllFiles(suffix string) (int, error) {
 
 	return count, nil
 }
-func handleCountCommand() {
-	// Default to "go" if no suffix provided
+func handleCountCommand(ctx context.Context) {
 	var recursive bool
-	suffix := "go"
+	suffix := "go" // default suffix
 
-	// Simple flag parsing for count command
 	for i := 2; i < len(os.Args); i++ {
 		switch os.Args[i] {
 		case "-r", "--recursive":
@@ -659,13 +697,17 @@ func handleCountCommand() {
 	var err error
 
 	if recursive {
-		count, err = countAllFilesRecursive(suffix)
+		count, err = countAllFilesRecursive(ctx, suffix)
 	} else {
 		count, err = countAllFiles(suffix)
 	}
 
 	if err != nil {
-		fmt.Printf("❌ Error: %v\n", err)
+		if err == context.Canceled {
+			fmt.Println("❌ Operation cancelled by user")
+		} else {
+			fmt.Printf("❌ Error: %v\n", err)
+		}
 		return
 	}
 
@@ -675,28 +717,41 @@ func handleCountCommand() {
 		fmt.Printf("📁 Found %d .%s files\n", count, suffix)
 	}
 }
-func countAllFilesRecursive(suffix string) (int, error) {
+func countAllFilesRecursive(ctx context.Context, suffix string) (int, error) {
 	suffix = strings.TrimPrefix(suffix, ".")
 	count := 0
 
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		if err != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if err != nil {
+				return nil // Skip files with errors
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), "."+suffix) {
+				count++
+			}
 			return nil
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), "."+suffix) {
-			count++
-		}
-		return nil
 	})
 
 	return count, err
 }
-func handleTreeCommand() {
+func handleTreeCommand(ctx context.Context) {
 	root := "."
 	fmt.Printf("📂 Directory tree for: %s\n", root)
-	printTree(root, "")
+	printTree(ctx, root, "")
 }
-func printTree(path string, prefix string) {
+
+func printTree(ctx context.Context, path string, prefix string) {
+	select {
+	case <-ctx.Done():
+		fmt.Println("\n❌ Operation cancelled")
+		return
+	default:
+	}
+
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		fmt.Printf("❌ Error reading directory: %v\n", err)
@@ -715,13 +770,13 @@ func printTree(path string, prefix string) {
 			fmt.Printf("%s└── %s\n", prefix, entry.Name())
 			newPrefix := prefix + "    "
 			if entry.IsDir() {
-				printTree(filepath.Join(path, entry.Name()), newPrefix)
+				printTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
 			}
 		} else {
 			fmt.Printf("%s├── %s\n", prefix, entry.Name())
 			newPrefix := prefix + "│   "
 			if entry.IsDir() {
-				printTree(filepath.Join(path, entry.Name()), newPrefix)
+				printTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
 			}
 		}
 	}
