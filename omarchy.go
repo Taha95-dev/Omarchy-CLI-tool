@@ -4,6 +4,9 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"omarchy/pkg/counter"
+	"omarchy/pkg/gitsupport"
+	"omarchy/pkg/tree"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -624,149 +627,11 @@ func handleGitSync(ctx context.Context) {
 	syncCmd.Parse(os.Args[2:])
 
 	if *dryRun {
-		dryRunSync(ctx)
+		gitsupport.DryRunSync(ctx)
 		return
 	}
 
-	gitSync(ctx, *autoMsg, *message)
-}
-
-func gitSync(ctx context.Context, autoMsg bool, customMsg string) {
-	select {
-	case <-ctx.Done():
-		fmt.Println("❌ Sync cancelled")
-		return
-	default:
-	}
-
-	if !isGitInstalled() {
-		printError("Git is not installed or not in PATH")
-		printInfo("Install Git from: https://git-scm.com")
-		return
-	}
-
-	// Check 2: In a git repo?
-	inRepo, err := isGitRepo()
-	if err != nil {
-		printError(err.Error())
-		return
-	}
-	if !inRepo {
-		printError("Not in a git repository")
-		printInfo("Initializing git repository...")
-		runCmd("git", "init")
-		return
-	}
-
-	// Check 3: Any changes?
-	if !hasGitChanges(".") {
-		printInfo("No changes to commit")
-		return
-	}
-
-	// Check 4: Git user configured?
-	userName, userEmail, err := checkGitConfig()
-	if err != nil {
-		printError("Git user not configured")
-		return
-	}
-	fmt.Printf("✅ Git user: %s <%s>\n", userName, userEmail)
-
-	// Add changes
-	runCmd("git", "add", ".")
-
-	// Create commit message
-	message := customMsg
-	if message == "" && autoMsg {
-		message = fmt.Sprintf("Auto-sync: %s", time.Now().Format("2006-01-02 15:04:05"))
-	}
-	if message == "" && !autoMsg {
-		message = "Sync via Omarchy"
-	}
-
-	// Commit
-	runCmd("git", "commit", "-m", message)
-	fmt.Println("✅ Committed:", message)
-
-	// Check if remote exists before pushing
-	if hasRemote() {
-		runCmd("git", "push")
-		fmt.Println("✅ Pushed to remote")
-	} else {
-		fmt.Println("⚠️ No remote configured. Commit saved locally only.")
-		fmt.Println("   Run: git remote add origin <url>")
-	}
-}
-
-func dryRunSync(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		fmt.Println("❌ Dry run cancelled")
-		return
-	default:
-	}
-
-	fmt.Println("🔍 Dry run - what would happen:")
-
-	if !isGitInstalled() {
-		printError("Git is not installed or not in PATH")
-		printInfo("Install Git from: https://git-scm.com")
-		return
-	}
-
-	inRepo, err := isGitRepo()
-	if err != nil {
-		printError(err.Error())
-		return
-	}
-	if !inRepo {
-		printError("Not in a git repository")
-		printInfo("Run: git init")
-		return
-	}
-
-	if hasGitChanges(".") {
-		fmt.Println("  ✅ Would add all changes")
-		fmt.Println("  ✅ Would commit with message: Auto-sync: <timestamp>")
-
-		if hasRemote() {
-			fmt.Println("  ✅ Would push to remote")
-		} else {
-			fmt.Println("  ⚠️ Would skip push (no remote)")
-		}
-	} else {
-		fmt.Println("  📝 No changes to commit")
-	}
-}
-func hasRemote() bool {
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	err := cmd.Run()
-	return err == nil
-}
-func isGitInstalled() bool {
-	_, err := exec.LookPath("git")
-	return err == nil
-}
-
-func isGitRepo() (bool, error) {
-	if !isGitInstalled() {
-		return false, fmt.Errorf("git is not installed or not in PATH")
-	}
-
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	err := cmd.Run()
-	if err != nil {
-		return false, nil // Not a git repo (no error)
-	}
-	return true, nil
-}
-func hasGitChanges(path string) bool {
-	cmd := exec.Command("git", "-C", path, "status", "--porcelain")
-	output, err := cmd.Output()
-	if err != nil {
-		return false // Assume no changes if git fails
-	}
-	return len(output) > 0 // Has changes if output not empty
+	gitsupport.GitSync(ctx, *autoMsg, *message)
 }
 
 func runCmd(name string, args ...string) {
@@ -892,27 +757,9 @@ func writeFileContent(path, content string) error {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	return os.WriteFile(path, []byte(content), 0644)
 }
-func countAllFiles(suffix string) (int, error) {
-	// Remove leading dot if user added it
-	suffix = strings.TrimPrefix(suffix, ".")
-
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		return 0, err
-	}
-
-	count := 0
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), "."+suffix) {
-			count++
-		}
-	}
-
-	return count, nil
-}
 func handleCountCommand(ctx context.Context) {
 	var recursive bool
-	suffix := "go" // default suffix
+	suffix := "go"
 
 	for i := 2; i < len(os.Args); i++ {
 		switch os.Args[i] {
@@ -927,9 +774,9 @@ func handleCountCommand(ctx context.Context) {
 	var err error
 
 	if recursive {
-		count, err = countAllFilesRecursive(ctx, suffix)
+		count, err = counter.CountRecursive(ctx, suffix)
 	} else {
-		count, err = countAllFiles(suffix)
+		count, err = counter.Count(suffix)
 	}
 
 	if err != nil {
@@ -947,69 +794,10 @@ func handleCountCommand(ctx context.Context) {
 		fmt.Printf("📁 Found %d .%s files\n", count, suffix)
 	}
 }
-func countAllFilesRecursive(ctx context.Context, suffix string) (int, error) {
-	suffix = strings.TrimPrefix(suffix, ".")
-	count := 0
-
-	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			if err != nil {
-				return nil // Skip files with errors
-			}
-			if !d.IsDir() && strings.HasSuffix(d.Name(), "."+suffix) {
-				count++
-			}
-			return nil
-		}
-	})
-
-	return count, err
-}
 func handleTreeCommand(ctx context.Context) {
 	root := "."
 	fmt.Printf("📂 Directory tree for: %s\n", root)
-	printTree(ctx, root, "")
-}
-
-func printTree(ctx context.Context, path string, prefix string) {
-	select {
-	case <-ctx.Done():
-		fmt.Println("\n❌ Operation cancelled")
-		return
-	default:
-	}
-
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		fmt.Printf("❌ Error reading directory: %v\n", err)
-		return
-	}
-	for i, entry := range entries {
-		// Skip hidden files/directories
-		if strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-
-		isLast := i == len(entries)-1
-
-		// Determine connector
-		if isLast {
-			fmt.Printf("%s└── %s\n", prefix, entry.Name())
-			newPrefix := prefix + "    "
-			if entry.IsDir() {
-				printTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
-			}
-		} else {
-			fmt.Printf("%s├── %s\n", prefix, entry.Name())
-			newPrefix := prefix + "│   "
-			if entry.IsDir() {
-				printTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
-			}
-		}
-	}
+	tree.Print(ctx, root)
 }
 func getOS() string {
 	switch runtime.GOOS {
