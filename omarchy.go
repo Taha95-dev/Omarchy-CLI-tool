@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var Version = "dev"
+var Version = "v1.10.0"
 
 func main() {
 	config := loadConfig()
@@ -54,6 +54,47 @@ func main() {
 		case "tree":
 			handleTreeCommand(ctx)
 			return
+		case "save":
+			if len(os.Args) < 3 {
+				fmt.Println("Usage: omarchy save <template-name>")
+				return
+			}
+			templateName := os.Args[2]
+			currentDir, _ := os.Getwd()
+			if err := saveTemplate(templateName, currentDir); err != nil {
+				fmt.Printf("❌ Failed to save template: %v\n", err)
+			} else {
+				fmt.Printf("✅ Saved template: %s\n", templateName)
+			}
+			return
+		case "delete-template", "rm-template":
+			if len(os.Args) < 3 {
+				fmt.Println("Usage: omarchy delete-template <template-name>")
+				fmt.Println("   or: omarchy rm-template <template-name>")
+				return
+			}
+			templateName := os.Args[2]
+			deleteTemplate(templateName)
+			return
+		case "list-templates", "ls-templates":
+			listTemplates()
+			return
+		case "build":
+			buildName := ""
+			if len(os.Args) > 2 {
+				buildName = os.Args[2]
+			}
+			if err := RunGoBuild(buildName); err != nil {
+				fmt.Printf("❌ Build failed: %v\n", err)
+			}
+			return
+		case "help", "--help", "-h":
+			showHelp()
+			return
+		default:
+			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
+			fmt.Println("Run 'omarchy help' for available commands")
+			return
 		case "version", "--version":
 			fmt.Println("Omarchy v0.2.0")
 			return
@@ -72,6 +113,9 @@ func main() {
 	withReact := flag.Bool("react", false, "Add React frontend")
 	withGo := flag.Bool("go", false, "Add Go backend")
 	withNode := flag.Bool("node", false, "Add Node.js backend")
+	withVue := flag.Bool("vue", false, "Add Vue frontend")
+	withSvelte := flag.Bool("svelte", false, "Add Svelte frontend")
+	withNext := flag.Bool("next", false, "Add Next.js frontend")
 
 	flag.Parse()
 
@@ -86,7 +130,7 @@ func main() {
 	case "cli":
 		createCLIStructure(rootPath)
 	case "fullstack":
-		createFullstackStructure(rootPath, *withReact, *withGo, *withNode)
+		createFullstackStructure(rootPath, *withReact, *withVue, *withSvelte, *withNext, *withGo, *withNode)
 	case "backend":
 		createBackendOnly(rootPath, *backendLang)
 	default:
@@ -154,32 +198,223 @@ func main() {
 	os.WriteFile(filepath.Join(path, "main.go"), []byte(mainContent), 0644)
 }
 
-func createFullstackStructure(path string, withReact, withGo, withNode bool) {
+func createFullstackStructure(path string, withReact, withVue, withSvelte, withNext, withGo, withNode bool) {
 	// Frontend folder
-	os.MkdirAll(filepath.Join(path, "frontend/src/components"), 0755)
-	os.MkdirAll(filepath.Join(path, "frontend/public"), 0755)
+	var frontendPath string
+	switch {
+	case withReact:
+		frontendPath = filepath.Join(path, "frontend-react")
+		createReactFiles(frontendPath)
+	case withVue:
+		frontendPath = filepath.Join(path, "frontend-vue")
+		createVueFiles(frontendPath)
+	case withSvelte:
+		frontendPath = filepath.Join(path, "frontend-svelte")
+		createSvelteFiles(frontendPath)
+	case withNext:
+		frontendPath = filepath.Join(path, "frontend-next")
+		createNextFiles(frontendPath)
+	}
 
 	// Backend folder
-	os.MkdirAll(filepath.Join(path, "backend/cmd"), 0755)
-	os.MkdirAll(filepath.Join(path, "backend/internal"), 0755)
-	os.MkdirAll(filepath.Join(path, "backend/pkg"), 0755)
-
-	// Shared
-	os.MkdirAll(filepath.Join(path, "shared"), 0755)
-	os.MkdirAll(filepath.Join(path, "scripts"), 0755)
-
-	if withReact {
-		createReactFiles(filepath.Join(path, "frontend"))
-	}
-
 	if withGo {
-		createGoBackend(filepath.Join(path, "backend"))
+		createGoBackend(filepath.Join(path, "backend-go"))
 	}
 	if withNode {
-		createNodeBackend(filepath.Join(path, "backend"))
+		createNodeBackend(filepath.Join(path, "backend-node"))
 	}
 }
+func createVueFiles(path string) {
+	// Create folders
+	folders := []string{
+		"src/components",
+		"src/views",
+		"src/assets",
+		"public",
+	}
+	for _, folder := range folders {
+		os.MkdirAll(filepath.Join(path, folder), 0755)
+	}
 
+	// package.json
+	packageJSON := `{
+  "name": "omarchy-vue-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}`
+	os.WriteFile(filepath.Join(path, "package.json"), []byte(packageJSON), 0644)
+
+	// App.vue
+	appVue := `<template>
+  <div>
+    <h1>Omarchy Vue App</h1>
+    <button @click="count++">Count: {{ count }}</button>
+  </div>
+</template>
+
+<script setup>
+import { ref } from 'vue'
+const count = ref(0)
+</script>
+
+<style scoped>
+h1 {
+  color: #42b883;
+}
+</style>`
+	os.WriteFile(filepath.Join(path, "src/App.vue"), []byte(appVue), 0644)
+
+	// main.js
+	mainJS := `import { createApp } from 'vue'
+import App from './App.vue'
+
+createApp(App).mount('#app')`
+	os.WriteFile(filepath.Join(path, "src/main.js"), []byte(mainJS), 0644)
+
+	// index.html
+	indexHTML := `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omarchy Vue App</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>`
+	os.WriteFile(filepath.Join(path, "index.html"), []byte(indexHTML), 0644)
+}
+func createSvelteFiles(path string) {
+	folders := []string{
+		"src/components",
+		"src/lib",
+		"public",
+	}
+	for _, folder := range folders {
+		os.MkdirAll(filepath.Join(path, folder), 0755)
+	}
+
+	packageJSON := `{
+  "name": "omarchy-svelte-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "svelte": "^4.2.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^3.0.0",
+    "vite": "^5.0.0"
+  }
+}`
+	os.WriteFile(filepath.Join(path, "package.json"), []byte(packageJSON), 0644)
+
+	appSvelte := `<script>
+  let count = 0
+</script>
+
+<main>
+  <h1>Omarchy Svelte App</h1>
+  <button on:click={() => count++}>
+    Count: {count}
+  </button>
+</main>
+
+<style>
+  h1 {
+    color: #ff3e00;
+  }
+</style>`
+	os.WriteFile(filepath.Join(path, "src/App.svelte"), []byte(appSvelte), 0644)
+
+	mainJS := `import App from './App.svelte'
+
+const app = new App({
+  target: document.getElementById('app'),
+})
+
+export default app`
+	os.WriteFile(filepath.Join(path, "src/main.js"), []byte(mainJS), 0644)
+
+	indexHTML := `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omarchy Svelte App</title>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>`
+	os.WriteFile(filepath.Join(path, "index.html"), []byte(indexHTML), 0644)
+}
+func createNextFiles(path string) {
+	folders := []string{
+		"pages",
+		"components",
+		"styles",
+		"public",
+	}
+	for _, folder := range folders {
+		os.MkdirAll(filepath.Join(path, folder), 0755)
+	}
+
+	packageJSON := `{
+  "name": "omarchy-next-app",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}`
+	os.WriteFile(filepath.Join(path, "package.json"), []byte(packageJSON), 0644)
+
+	indexJS := `import Head from 'next/head'
+import { useState } from 'react'
+
+export default function Home() {
+  const [count, setCount] = useState(0)
+
+  return (
+    <>
+      <Head>
+        <title>Omarchy Next App</title>
+      </Head>
+      <main>
+        <h1>Omarchy Next.js App</h1>
+        <button onClick={() => setCount(count + 1)}>
+          Count: {count}
+        </button>
+      </main>
+    </>
+  )
+}`
+	os.WriteFile(filepath.Join(path, "pages/index.js"), []byte(indexJS), 0644)
+}
 func initGit(path string) {
 	// Create .gitignore
 	gitignore := `# Dependencies
@@ -418,7 +653,8 @@ func gitSync(ctx context.Context, autoMsg bool, customMsg string) {
 	}
 	if !inRepo {
 		printError("Not in a git repository")
-		printInfo("Run: git init")
+		printInfo("Initializing git repository...")
+		runCmd("git", "init")
 		return
 	}
 
@@ -812,8 +1048,244 @@ func printSuccess(msg string) {
 }
 
 func printInfo(msg string) {
-	fmt.Println("ℹ️", msg)
+	fmt.Println("✅", msg)
 }
-func saveTemplates(name string, content string) {
-	//future implementation (e.g. save to ~/.omarchy/templates/)
+func saveTemplate(name string, sourcePath string) error {
+	// Create templates directory
+	homeDir, _ := os.UserHomeDir()
+	templatesDir := filepath.Join(homeDir, ".omarchy", "templates")
+	os.MkdirAll(templatesDir, 0755)
+
+	// Create template folder
+	templatePath := filepath.Join(templatesDir, name)
+	if _, err := os.Stat(templatePath); err == nil {
+		fmt.Printf("⚠️ Template '%s' already exists. Overwrite? (y/N): ", name)
+		var resp string
+		fmt.Scanln(&resp)
+		if resp != "y" && resp != "Y" {
+			fmt.Println("❌ Save cancelled")
+			return nil
+		}
+		// Delete existing template
+		os.RemoveAll(templatePath)
+	}
+
+	os.MkdirAll(templatePath, 0755)
+
+	// Save template metadata
+	metadata := map[string]interface{}{
+		"name":        name,
+		"created":     time.Now().Format(time.RFC3339),
+		"source":      sourcePath,
+		"description": "Custom template",
+	}
+	metadataJSON, _ := yaml.Marshal(metadata)
+	os.WriteFile(filepath.Join(templatePath, "metadata.yaml"), metadataJSON, 0644)
+
+	// Copy structure (simplified version)
+	err := filepath.WalkDir(sourcePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, _ := filepath.Rel(sourcePath, path)
+		destPath := filepath.Join(templatePath, relPath)
+		if d.IsDir() {
+			os.MkdirAll(destPath, 0755)
+		} else {
+			data, _ := os.ReadFile(path)
+			os.WriteFile(destPath, data, 0644)
+		}
+		return nil
+	})
+	return err
+}
+func deleteTemplate(name string) {
+	homeDir, _ := os.UserHomeDir()
+	templatePath := filepath.Join(homeDir, ".omarchy", "templates", name)
+
+	// Check if template exists
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		fmt.Printf("❌ Template '%s' not found\n", name)
+		return
+	}
+
+	// Confirm deletion
+	fmt.Printf("⚠️ Are you sure you want to delete template '%s'? (y/N): ", name)
+	var resp string
+	fmt.Scanln(&resp)
+	if resp != "y" && resp != "Y" {
+		fmt.Println("❌ Deletion cancelled")
+		return
+	}
+
+	// Delete template directory
+	err := os.RemoveAll(templatePath)
+	if err != nil {
+		fmt.Printf("❌ Failed to delete template: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Template '%s' deleted successfully\n", name)
+}
+func listTemplates() {
+	homeDir, _ := os.UserHomeDir()
+	templatesDir := filepath.Join(homeDir, ".omarchy", "templates")
+
+	// Check if templates directory exists
+	if _, err := os.Stat(templatesDir); os.IsNotExist(err) {
+		fmt.Println("📁 No templates saved yet")
+		fmt.Println("   Run: omarchy save <name> to save current project as template")
+		return
+	}
+
+	entries, err := os.ReadDir(templatesDir)
+	if err != nil {
+		fmt.Printf("❌ Failed to list templates: %v\n", err)
+		return
+	}
+
+	if len(entries) == 0 {
+		fmt.Println("📁 No templates saved yet")
+		return
+	}
+
+	fmt.Println("📁 Saved Templates:")
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Try to read metadata
+			metadataPath := filepath.Join(templatesDir, entry.Name(), "metadata.yaml")
+			if data, err := os.ReadFile(metadataPath); err == nil {
+				var metadata map[string]interface{}
+				yaml.Unmarshal(data, &metadata)
+				if created, ok := metadata["created"]; ok {
+					fmt.Printf("  📂 %s (saved: %s)\n", entry.Name(), created)
+					continue
+				}
+			}
+			fmt.Printf("  📂 %s\n", entry.Name())
+		}
+	}
+}
+func RunGoBuild(name string) error {
+	outputName := name
+
+	// If no name provided (empty), try to get from go.mod
+	if outputName == "" {
+		// Read go.mod to get module name
+		data, err := os.ReadFile("go.mod")
+		if err == nil {
+			lines := strings.Split(string(data), "\n")
+			if len(lines) > 0 && strings.HasPrefix(lines[0], "module ") {
+				outputName = strings.TrimSpace(strings.TrimPrefix(lines[0], "module "))
+			}
+		}
+	}
+
+	if outputName == "" {
+		outputName = "app"
+	}
+
+	// Build the binary
+	buildCmd := exec.Command("go", "build", "-o", outputName)
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+
+	if err := buildCmd.Run(); err != nil {
+		printError("Build failed. Are you in a Go module directory?")
+		printInfo("Run: go mod init <module-name> first")
+		return fmt.Errorf("build failed: %w", err)
+	}
+
+	fmt.Printf("✅ Built binary: %s\n", outputName)
+
+	// Install to GOPATH/bin
+	installCmd := exec.Command("go", "install")
+	installCmd.Stdout = os.Stdout
+	installCmd.Stderr = os.Stderr
+
+	if err := installCmd.Run(); err != nil {
+		printWarning("Install failed, but binary was built")
+		fmt.Printf("You can still run: ./%s\n", outputName)
+		return nil
+	}
+
+	fmt.Printf("✅ Installed to GOPATH/bin\n")
+	return nil
+}
+func showHelp() {
+	fmt.Printf(`🚀 Omarchy - Project Scaffolding CLI Tool
+
+USAGE:
+  omarchy [command] [options]
+
+COMMANDS:
+  Project Creation:
+    omarchy -name <name> -type <type> [options]   Create new project
+
+  Templates:
+    omarchy save <template-name>                  Save current project as template
+    omarchy list-templates                        List all saved templates
+    omarchy delete-template <name>                Delete a saved template
+
+  Git:
+    omarchy sync [-a] [-m "message"]             Auto commit and push changes
+    omarchy sync --dry-run                       Preview what would happen
+
+  Utilities:
+    omarchy doctor                               Check development environment
+    omarchy count [ext] [-r]                     Count files by extension
+    omarchy tree                                 Show directory tree
+    omarchy version                              Show version
+
+  Help:
+    omarchy help, omarchy --help                 Show this help message
+
+PROJECT TYPES:
+  web          Basic website with HTML/CSS/JS
+  cli          Command-line interface tool
+  fullstack    Fullstack app with frontend + backend
+  backend      Backend only (API server)
+
+FRONTEND OPTIONS (for fullstack/web):
+  -react       Add React frontend with Vite
+  -vue         Add Vue.js frontend
+  -svelte      Add Svelte frontend
+  -next        Add Next.js frontend
+
+BACKEND OPTIONS (for fullstack/backend):
+  -go          Add Go backend with Gin
+  -node        Add Node.js backend with Express
+
+OTHER OPTIONS:
+  -name <name>          Project name (default: my-project)
+  -git                  Initialize git repository
+  -type <type>          Project type (default: web)
+
+EXAMPLES:
+  # Create a React + Node fullstack app
+  omarchy -name my-app -type fullstack -react -node -git
+
+  # Create a Vue + Go fullstack app
+  omarchy -name my-app -type fullstack -vue -go
+
+  # Create a backend-only Node API
+  omarchy -name my-api -type backend -node
+
+  # Save current project as template
+  omarchy save my-starter
+
+  # Auto commit and push all changes
+  omarchy sync -a
+
+  # Count all Go files recursively
+  omarchy count go -r
+
+CONFIGURATION:
+  ~/.omarchy.yaml      Default settings (author, license, default_type, etc.)
+
+VERSION:
+  Omarchy %s
+
+For more information: https://github.com/Taha95-dev/Omarchy-CLI-tool
+`, Version)
 }
