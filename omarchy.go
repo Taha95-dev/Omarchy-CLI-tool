@@ -32,19 +32,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Handle Ctrl+C
+	// Simpler signal handling - cancel immediately
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
 	go func() {
 		<-sigChan
-		fmt.Println("\n⚠️ Interrupt received. Do you want to cancel? (y/N): ")
-		var resp string
-		fmt.Scanln(&resp)
-		if resp == "y" || resp == "Y" {
-			cancel()
-			fmt.Println("👋 Cancelling operation...")
-		} else {
-			fmt.Println("✅ Continuing...")
-		}
+		fmt.Println("\n⚠️ Interrupt received. Cancelling...")
+		cancel()
 	}()
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
