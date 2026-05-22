@@ -4,24 +4,24 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"omarchy/pkg/config"
 	"omarchy/pkg/counter"
+	"omarchy/pkg/doctor"
 	"omarchy/pkg/gitsupport"
+	"omarchy/pkg/support"
+	"omarchy/pkg/templates"
 	"omarchy/pkg/tree"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 var Version = "v1.10.0"
 
 func main() {
-	config := loadConfig()
+	config := config.LoadConfig()
 
 	// Set defaults: config value, or fallback to hardcoded
 	defaultType := config.DefaultType
@@ -49,7 +49,7 @@ func main() {
 			handleGitSync(ctx)
 			return
 		case "doctor":
-			runDoctor(ctx)
+			doctor.RunDoctor(ctx)
 			return
 		case "count":
 			handleCountCommand(ctx)
@@ -64,7 +64,7 @@ func main() {
 			}
 			templateName := os.Args[2]
 			currentDir, _ := os.Getwd()
-			if err := saveTemplate(templateName, currentDir); err != nil {
+			if err := templates.SaveTemplate(templateName, currentDir); err != nil {
 				fmt.Printf("❌ Failed to save template: %v\n", err)
 			} else {
 				fmt.Printf("✅ Saved template: %s\n", templateName)
@@ -77,10 +77,10 @@ func main() {
 				return
 			}
 			templateName := os.Args[2]
-			deleteTemplate(templateName)
+			templates.DeleteTemplate(templateName)
 			return
 		case "list-templates", "ls-templates":
-			listTemplates()
+			templates.ListTemplates()
 			return
 		case "build":
 			buildName := ""
@@ -94,12 +94,12 @@ func main() {
 		case "help", "--help", "-h":
 			showHelp()
 			return
+		case "version", "--version":
+			fmt.Println("Omarchy" + Version)
+			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
 			fmt.Println("Run 'omarchy help' for available commands")
-			return
-		case "version", "--version":
-			fmt.Println("Omarchy" + Version)
 			return
 		}
 	}
@@ -535,32 +535,6 @@ func createDefaultStructure(path string) {
 	}
 }
 
-type Config struct {
-	Author       string `yaml:"author"`
-	License      string `yaml:"license"`
-	DefaultType  string `yaml:"default_type"`
-	DefaultReact bool   `yaml:"default_react"`
-	DefaultGit   bool   `yaml:"default_git"`
-	TypeBackend  string `yaml:"default_backend"`
-	Description  string `yaml:"default_description"`
-}
-
-func loadConfig() Config {
-	var config Config
-
-	homeDir, _ := os.UserHomeDir()
-	configPath := filepath.Join(homeDir, ".omarchy.yaml")
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return config // Return empty config (zero values)
-	}
-
-	yaml.Unmarshal(data, &config)
-	fmt.Println("✅ Config loaded from:", configPath)
-	return config
-}
-
 // Add to createFullstackStructure or create new function
 func createNodeBackend(path string) {
 	// Create folder structure
@@ -634,123 +608,6 @@ func handleGitSync(ctx context.Context) {
 	gitsupport.GitSync(ctx, *autoMsg, *message)
 }
 
-func runCmd(name string, args ...string) {
-	cmd := exec.Command(name, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		fmt.Println("⚠️ Warning:", err)
-	}
-}
-func runDoctor(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		fmt.Println("❌ Doctor check cancelled")
-		return
-	default:
-	}
-
-	fmt.Printf("🖥️ Operating System: %s\n", getOS())
-	fmt.Printf("🏠 Home Directory: %s\n", getHomeDir())
-	fmt.Println("🔍 Omarchy Environment Check")
-
-	// Check tools (these could also be made cancellable)
-	CheckTool("node", "--version")
-	CheckTool("go", "version")
-	CheckTool("git", "--version")
-	CheckTool("npm", "--version")
-	CheckTool("docker", "--version")
-
-	// Check config
-	configPath := getConfigPath()
-	if _, err := os.Stat(configPath); err == nil {
-		fmt.Println("✅ Omarchy config found at:", configPath)
-	} else {
-		fmt.Println("⚠️ Omarchy config not found (run: omarchy config init)")
-	}
-
-	// Check Git config
-	fmt.Println("\n📋 Git Configuration:")
-	checkGitConfig()
-}
-func getHomeDir() string {
-	home, _ := os.UserHomeDir()
-	return home
-}
-func getConfigPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(homeDir, ".omarchy.yaml")
-}
-func checkGitConfig() (string, string, error) {
-	nameCmd := exec.Command("git", "config", "--global", "user.name")
-	nameOutput, nameErr := nameCmd.Output()
-
-	emailCmd := exec.Command("git", "config", "--global", "user.email")
-	emailOutput, emailErr := emailCmd.Output()
-
-	if nameErr != nil || emailErr != nil {
-		fmt.Println("⚠️ Git user.name or user.email not set")
-		fmt.Println("   Run: git config --global user.name \"Your Name\"")
-		fmt.Println("   Run: git config --global user.email \"you@example.com\"")
-		return "", "", fmt.Errorf("git config not set")
-	}
-
-	userName := strings.TrimSpace(string(nameOutput))
-	userEmail := strings.TrimSpace(string(emailOutput))
-	fmt.Printf("✅ Git user: %s <%s>\n", userName, userEmail)
-	return userName, userEmail, nil
-}
-func checkGitRemote() {
-	// Check if remote origin exists
-	cmd := exec.Command("git", "remote", "get-url", "origin")
-	output, err := cmd.Output()
-	if err != nil {
-		fmt.Println("⚠️ No git remote configured (run: git remote add origin <url>)")
-	} else {
-		fmt.Println("✅ Remote origin:", string(output))
-	}
-}
-func CheckTool(tool string, versionFlag string) {
-	cmdName := tool
-	displayName := tool
-
-	// OS-specific adjustments
-	switch runtime.GOOS {
-	case "windows":
-		switch tool {
-		case "node":
-			cmdName = "node.exe"
-		case "python":
-			cmdName = "python.exe"
-		case "go":
-			cmdName = "go.exe"
-		}
-	case "darwin": // macOS
-		// Usually fine
-	case "linux":
-		// Usually fine
-	}
-
-	cmd := exec.Command(cmdName, versionFlag)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		if tool == "docker" {
-			fmt.Printf("⚠️ %s not installed (optional)\n", displayName)
-		} else {
-			fmt.Printf("❌ %s not installed or not in PATH\n", displayName)
-		}
-	} else {
-		version := strings.TrimSpace(string(output))
-		// Clean up version string (remove extra spaces, newlines)
-		version = strings.Split(version, "\n")[0]
-		fmt.Printf("✅ %s %s\n", displayName, version)
-	}
-}
-
 // When writing files, use consistent line endings
 func writeFileContent(path, content string) error {
 	// Convert to Unix line endings (LF) for consistency
@@ -799,161 +656,6 @@ func handleTreeCommand(ctx context.Context) {
 	fmt.Printf("📂 Directory tree for: %s\n", root)
 	tree.Print(ctx, root)
 }
-func getOS() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "Windows"
-	case "darwin":
-		return "macOS"
-	case "linux":
-		return "Linux"
-	default:
-		return runtime.GOOS
-	}
-}
-func ConfigPath() string {
-	home, _ := os.UserHomeDir()
-
-	switch runtime.GOOS {
-	case "windows":
-		return filepath.Join(home, "AppData", "Roaming", ".omarchy.yaml")
-	case "darwin": // macOS
-		return filepath.Join(home, "Library", "Application Support", "omarchy.yaml")
-	default: // Linux and others
-		return filepath.Join(home, ".config", "omarchy.yaml")
-	}
-}
-func printError(msg string) {
-	fmt.Println("❌", msg)
-}
-
-func printWarning(msg string) {
-	fmt.Println("⚠️", msg)
-}
-
-func printSuccess(msg string) {
-	fmt.Println("✅", msg)
-}
-
-func printInfo(msg string) {
-	fmt.Println("✅", msg)
-}
-func saveTemplate(name string, sourcePath string) error {
-	// Create templates directory
-	homeDir, _ := os.UserHomeDir()
-	templatesDir := filepath.Join(homeDir, ".omarchy", "templates")
-	os.MkdirAll(templatesDir, 0755)
-
-	// Create template folder
-	templatePath := filepath.Join(templatesDir, name)
-	if _, err := os.Stat(templatePath); err == nil {
-		fmt.Printf("⚠️ Template '%s' already exists. Overwrite? (y/N): ", name)
-		var resp string
-		fmt.Scanln(&resp)
-		if resp != "y" && resp != "Y" {
-			fmt.Println("❌ Save cancelled")
-			return nil
-		}
-		// Delete existing template
-		os.RemoveAll(templatePath)
-	}
-
-	os.MkdirAll(templatePath, 0755)
-
-	// Save template metadata
-	metadata := map[string]interface{}{
-		"name":        name,
-		"created":     time.Now().Format(time.RFC3339),
-		"source":      sourcePath,
-		"description": "Custom template",
-	}
-	metadataJSON, _ := yaml.Marshal(metadata)
-	os.WriteFile(filepath.Join(templatePath, "metadata.yaml"), metadataJSON, 0644)
-
-	// Copy structure (simplified version)
-	err := filepath.WalkDir(sourcePath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, _ := filepath.Rel(sourcePath, path)
-		destPath := filepath.Join(templatePath, relPath)
-		if d.IsDir() {
-			os.MkdirAll(destPath, 0755)
-		} else {
-			data, _ := os.ReadFile(path)
-			os.WriteFile(destPath, data, 0644)
-		}
-		return nil
-	})
-	return err
-}
-func deleteTemplate(name string) {
-	homeDir, _ := os.UserHomeDir()
-	templatePath := filepath.Join(homeDir, ".omarchy", "templates", name)
-
-	// Check if template exists
-	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
-		fmt.Printf("❌ Template '%s' not found\n", name)
-		return
-	}
-
-	// Confirm deletion
-	fmt.Printf("⚠️ Are you sure you want to delete template '%s'? (y/N): ", name)
-	var resp string
-	fmt.Scanln(&resp)
-	if resp != "y" && resp != "Y" {
-		fmt.Println("❌ Deletion cancelled")
-		return
-	}
-
-	// Delete template directory
-	err := os.RemoveAll(templatePath)
-	if err != nil {
-		fmt.Printf("❌ Failed to delete template: %v\n", err)
-		return
-	}
-
-	fmt.Printf("✅ Template '%s' deleted successfully\n", name)
-}
-func listTemplates() {
-	homeDir, _ := os.UserHomeDir()
-	templatesDir := filepath.Join(homeDir, ".omarchy", "templates")
-
-	// Check if templates directory exists
-	if _, err := os.Stat(templatesDir); os.IsNotExist(err) {
-		fmt.Println("📁 No templates saved yet")
-		fmt.Println("   Run: omarchy save <name> to save current project as template")
-		return
-	}
-
-	entries, err := os.ReadDir(templatesDir)
-	if err != nil {
-		fmt.Printf("❌ Failed to list templates: %v\n", err)
-		return
-	}
-
-	if len(entries) == 0 {
-		fmt.Println("📁 No templates saved yet")
-		return
-	}
-
-	fmt.Println("📁 Saved Templates:")
-	for _, entry := range entries {
-		if entry.IsDir() {
-			// Try to read metadata
-			metadataPath := filepath.Join(templatesDir, entry.Name(), "metadata.yaml")
-			if data, err := os.ReadFile(metadataPath); err == nil {
-				var metadata map[string]interface{}
-				yaml.Unmarshal(data, &metadata)
-				if created, ok := metadata["created"]; ok {
-					fmt.Printf("  📂 %s (saved: %s)\n", entry.Name(), created)
-					continue
-				}
-			}
-			fmt.Printf("  📂 %s\n", entry.Name())
-		}
-	}
-}
 func RunGoBuild(name string) error {
 	outputName := name
 
@@ -979,8 +681,8 @@ func RunGoBuild(name string) error {
 	buildCmd.Stderr = os.Stderr
 
 	if err := buildCmd.Run(); err != nil {
-		printError("Build failed. Are you in a Go module directory?")
-		printInfo("Run: go mod init <module-name> first")
+		support.PrintError("Build failed. Are you in a Go module directory?")
+		support.PrintInfo("Run: go mod init <module-name> first")
 		return fmt.Errorf("build failed: %w", err)
 	}
 
@@ -992,7 +694,7 @@ func RunGoBuild(name string) error {
 	installCmd.Stderr = os.Stderr
 
 	if err := installCmd.Run(); err != nil {
-		printWarning("Install failed, but binary was built")
+		support.PrintWarning("Install failed, but binary was built")
 		fmt.Printf("You can still run: ./%s\n", outputName)
 		return nil
 	}

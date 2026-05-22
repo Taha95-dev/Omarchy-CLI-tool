@@ -43,7 +43,7 @@ func GitSync(ctx context.Context, autoMsg bool, customMsg string) {
 	}
 
 	// Check 4: Git user configured?
-	userName, userEmail, err := checkGitConfig()
+	userName, userEmail, err := CheckGitConfig()
 	if err != nil {
 		support.PrintError("Git user not configured")
 		return
@@ -146,7 +146,7 @@ func hasGitChanges(path string) bool {
 	}
 	return len(output) > 0 // Has changes if output not empty
 }
-func checkGitConfig() (string, string, error) {
+func CheckGitConfig() (string, string, error) {
 	nameCmd := exec.Command("git", "config", "--global", "user.name")
 	nameOutput, nameErr := nameCmd.Output()
 
