@@ -44,7 +44,7 @@ func main() {
 		fmt.Println("\n⚠️ Interrupt received. Cancelling...")
 		cancel()
 	}()
-	if len(os.Args) > 1 {
+	if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
 		switch os.Args[1] {
 		case "sync":
 			handleGitSync(ctx)
@@ -123,7 +123,6 @@ func main() {
 	withVue := flag.Bool("vue", false, "Add Vue frontend")
 	withSvelte := flag.Bool("svelte", false, "Add Svelte frontend")
 	withNext := flag.Bool("next", false, "Add Next.js frontend")
-
 	flag.Parse()
 
 	// Create project root
