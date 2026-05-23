@@ -49,3 +49,4 @@ omarchy -name my-app -type fullstack -next -node
 # Create a backend-only API
 omarchy -name my-api -type backend -node
 ```
+# Test 2FA setup
