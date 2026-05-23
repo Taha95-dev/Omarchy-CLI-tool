@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"omarchy/pkg/config"
 	"omarchy/pkg/counter"
 	"omarchy/pkg/doctor"
@@ -93,6 +94,9 @@ func main() {
 			return
 		case "help", "--help", "-h":
 			showHelp()
+			return
+		case "tree-build", "t-build":
+			handleTreeCommand(ctx)
 			return
 		case "version", "--version":
 			fmt.Println("Omarchy" + Version)
@@ -726,6 +730,7 @@ COMMANDS:
     omarchy count [ext] [-r]                     Count files by extension
     omarchy tree                                 Show directory tree
     omarchy version                              Show version
+	omarchy tree-build [--preview] [--from file]    Create files/folders from tree structure
 
   Help:
     omarchy help, omarchy --help                 Show this help message
@@ -778,4 +783,61 @@ VERSION:
 
 For more information: https://github.com/Taha95-dev/Omarchy-CLI-tool
 `, Version)
+}
+func handleTreeBuildCommand() {
+	var fromFile string
+	var preview bool
+
+	// Parse flags
+	for i := 2; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "-f", "--from":
+			if i+1 < len(os.Args) {
+				fromFile = os.Args[i+1]
+				i++
+			}
+		case "--preview":
+			preview = true
+		}
+	}
+
+	var treeText string
+	var err error
+
+	if fromFile != "" {
+		data, err := os.ReadFile(fromFile)
+		if err != nil {
+			fmt.Printf("❌ Failed to read file: %v\n", err)
+			return
+		}
+		treeText = string(data)
+	} else {
+		fmt.Println("📋 Paste your tree structure (Ctrl+Z then Enter when done):")
+		data, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Printf("❌ Failed to read input: %v\n", err)
+			return
+		}
+		treeText = string(data)
+	}
+
+	lines := strings.Split(treeText, "\n")
+	root, err := tree.ParseTree(lines)
+	if err != nil {
+		fmt.Printf("❌ Failed to parse tree: %v\n", err)
+		return
+	}
+
+	if preview {
+		fmt.Println("📂 Preview of tree structure:")
+		tree.PrintTreePreview(root, "")
+		return
+	}
+
+	if err := tree.BuildFromTree(root, "."); err != nil {
+		fmt.Printf("❌ Failed to build: %v\n", err)
+		return
+	}
+
+	fmt.Println("\n✅ Tree structure created successfully!")
 }
