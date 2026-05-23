@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"omarchy/pkg/config"
 	"omarchy/pkg/counter"
 	"omarchy/pkg/doctor"
@@ -16,10 +18,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
-var Version = "v1.11.0"
+var Version = "v1.13.0"
 
 func main() {
 	config := config.LoadConfig()
@@ -774,6 +777,9 @@ EXAMPLES:
   # Count all Go files recursively
   omarchy count go -r
 
+  # Auto Update Omarchy CLI tool to latest version
+  omarchy update
+
 CONFIGURATION:
   ~/.omarchy.yaml      Default settings (author, license, default_type, etc.)
 
@@ -839,4 +845,105 @@ func handleTreeBuildCommand() {
 	}
 
 	fmt.Println("\n✅ Tree structure created successfully!")
+}
+func handleUpdateCommand() {
+	fmt.Printf("🔍 Checking for updates...\n")
+
+	// Get latest version from GitHub API
+	url := "https://api.github.com/repos/Taha95-dev/Omarchy-CLI-tool/releases/latest"
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Printf("❌ Failed to check for updates: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("❌ Failed to read response: %v\n", err)
+		return
+	}
+
+	var release struct {
+		TagName string `json:"tag_name"`
+	}
+	json.Unmarshal(body, &release)
+
+	latestVersion := release.TagName
+
+	if latestVersion == Version {
+		fmt.Printf("✅ Already on latest version: %s\n", Version)
+		return
+	}
+
+	fmt.Printf("📦 New version available: %s (current: %s)\n", latestVersion, Version)
+
+	// Determine binary name based on OS
+	var binaryName string
+	switch runtime.GOOS {
+	case "windows":
+		binaryName = "omarchy-windows-amd64.exe"
+	case "linux":
+		binaryName = "omarchy-linux-amd64"
+	case "darwin":
+		binaryName = "omarchy-darwin-amd64"
+	default:
+		fmt.Printf("❌ Unsupported OS: %s\n", runtime.GOOS)
+		return
+	}
+
+	// Download URL
+	downloadURL := fmt.Sprintf("https://github.com/Taha95-dev/Omarchy-CLI-tool/releases/download/%s/%s", latestVersion, binaryName)
+
+	fmt.Printf("⬇️ Downloading update...\n")
+
+	// Download the binary
+	resp, err = http.Get(downloadURL)
+	if err != nil {
+		fmt.Printf("❌ Failed to download: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Get current executable path
+	execPath, err := os.Executable()
+	if err != nil {
+		fmt.Printf("❌ Failed to get executable path: %v\n", err)
+		return
+	}
+
+	// Download to temp file
+	tempPath := execPath + ".new"
+	out, err := os.Create(tempPath)
+	if err != nil {
+		fmt.Printf("❌ Failed to create temp file: %v\n", err)
+		return
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		fmt.Printf("❌ Failed to save: %v\n", err)
+		return
+	}
+	out.Close()
+
+	// Make executable (Unix)
+	if runtime.GOOS != "windows" {
+		os.Chmod(tempPath, 0755)
+	}
+
+	fmt.Printf("🔄 Installing update...\n")
+
+	// Replace old binary with new one
+	err = os.Rename(tempPath, execPath)
+	if err != nil {
+		// On Windows, you might need to move differently
+		fmt.Printf("⚠️ Please run as administrator to complete update\n")
+		fmt.Printf("   Or manually replace: %s\n", execPath)
+		return
+	}
+
+	fmt.Printf("✅ Updated to version %s!\n", latestVersion)
+	fmt.Printf("   Run 'omarchy version' to confirm\n")
 }
