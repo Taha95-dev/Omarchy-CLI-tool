@@ -8,16 +8,22 @@ import (
 	"strings"
 )
 
-func Print(ctx context.Context, root string) {
-	PrintTree(ctx, root, "")
+func Print(ctx context.Context, root string, maxDepth int) {
+	PrintTree(ctx, root, "", 0, maxDepth)
 }
 
-func PrintTree(ctx context.Context, path string, prefix string) {
+func PrintTree(ctx context.Context, path string, prefix string, currentDepth int, maxDepth int) {
 	select {
 	case <-ctx.Done():
 		fmt.Println("\n❌ Operation cancelled")
 		return
 	default:
+	}
+
+	// Stop if max depth reached
+	if maxDepth > 0 && currentDepth >= maxDepth {
+		fmt.Printf("%s└── ... (max depth %d reached)\n", prefix, maxDepth)
+		return
 	}
 
 	entries, err := os.ReadDir(path)
@@ -27,7 +33,14 @@ func PrintTree(ctx context.Context, path string, prefix string) {
 	}
 
 	for i, entry := range entries {
+		// Skip hidden files/directories (starts with .)
 		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		// Also skip specific large folders
+		if entry.Name() == "node_modules" || entry.Name() == ".git" || entry.Name() == ".vs" {
+			fmt.Printf("%s├── [%s/ (skipped)]\n", prefix, entry.Name())
 			continue
 		}
 
@@ -35,15 +48,15 @@ func PrintTree(ctx context.Context, path string, prefix string) {
 
 		if isLast {
 			fmt.Printf("%s└── %s\n", prefix, entry.Name())
-			newPrefix := prefix + "    "
 			if entry.IsDir() {
-				PrintTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
+				newPrefix := prefix + "    "
+				PrintTree(ctx, filepath.Join(path, entry.Name()), newPrefix, currentDepth+1, maxDepth)
 			}
 		} else {
 			fmt.Printf("%s├── %s\n", prefix, entry.Name())
-			newPrefix := prefix + "│   "
 			if entry.IsDir() {
-				PrintTree(ctx, filepath.Join(path, entry.Name()), newPrefix)
+				newPrefix := prefix + "│   "
+				PrintTree(ctx, filepath.Join(path, entry.Name()), newPrefix, currentDepth+1, maxDepth)
 			}
 		}
 	}

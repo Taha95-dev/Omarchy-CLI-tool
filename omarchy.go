@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"omarchy/pkg/config"
 	"omarchy/pkg/counter"
+	"omarchy/pkg/database"
+	"omarchy/pkg/deploy"
 	"omarchy/pkg/doctor"
 	"omarchy/pkg/gitsupport"
 	"omarchy/pkg/support"
@@ -22,7 +24,7 @@ import (
 	"strings"
 )
 
-var Version = "v1.13.1"
+var Version = "v2.0.0"
 
 func main() {
 	config := config.LoadConfig()
@@ -99,13 +101,26 @@ func main() {
 			showHelp()
 			return
 		case "tree-build", "t-build":
-			handleTreeCommand(ctx)
+			handleTreeBuildCommand()
 			return
 		case "version", "--version":
 			fmt.Println("Omarchy" + Version)
 			return
 		case "fix-git-home":
 			gitsupport.HandleFixGitInHome()
+			return
+		case "deploy":
+			HandleDeployCommand()
+			return
+		case "update":
+			handleUpdateCommand()
+			return
+		case "db":
+			if len(os.Args) < 3 {
+				fmt.Println("Usage: omarchy db <init|migrate|seed|reset|status>")
+				return
+			}
+			handleDBCommand()
 			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
@@ -129,6 +144,8 @@ func main() {
 	withVue := flag.Bool("vue", false, "Add Vue frontend")
 	withSvelte := flag.Bool("svelte", false, "Add Svelte frontend")
 	withNext := flag.Bool("next", false, "Add Next.js frontend")
+	withPython := flag.Bool("python", false, "Add Python backend")
+	withCpp := flag.Bool("cpp", false, "Add C++ backend")
 	flag.Parse()
 
 	// Create project root
@@ -142,9 +159,9 @@ func main() {
 	case "cli":
 		createCLIStructure(rootPath)
 	case "fullstack":
-		createFullstackStructure(rootPath, *withReact, *withVue, *withSvelte, *withNext, *withGo, *withNode)
+		createFullstackStructure(rootPath, *withReact, *withVue, *withSvelte, *withNext, *withGo, *withNode, *withPython, *withCpp)
 	case "backend":
-		createBackendOnly(rootPath, *backendLang)
+		createBackendOnly(rootPath, *backendLang, *withPython, *withCpp)
 	default:
 		createDefaultStructure(rootPath)
 	}
@@ -154,15 +171,278 @@ func main() {
 	}
 	fmt.Printf("✅ Created %s project: %s\n", *projectType, *projectName)
 }
-func createBackendOnly(path string, backendType string) {
-	switch backendType {
-	case "go":
-		createGoBackend(path)
-	case "node":
-		createNodeBackend(path)
-	default:
-		createGoBackend(path)
+func HandleDeployCommand() {
+	deployCmd := flag.NewFlagSet("deploy", flag.ExitOnError)
+	platform := deployCmd.String("platform", "render", "Deployment platform")
+	deployCmd.Parse(os.Args[2:])
+
+	projectType := deploy.DetectProjectType()
+	if projectType == deploy.Unknown {
+		fmt.Println("❌ Could not detect project type")
+		return
 	}
+	fmt.Printf("📦 Detected: %s\n", projectType)
+
+	detectedPlatform := deploy.DetectPlatform()
+	if *platform != "render" {
+		detectedPlatform = deploy.Platform(*platform)
+	}
+
+	projectName := filepath.Base(getCurrentDir())
+
+	if err := deploy.Deploy(detectedPlatform, projectType, projectName); err != nil {
+		fmt.Printf("❌ Deployment failed: %v\n", err)
+	}
+}
+func handleDBCommand() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: omarchy db <init|migrate|seed|reset|status> [--dry-run]")
+		return
+	}
+
+	subCmd := os.Args[2]
+	dbType := database.DetectDatabase()
+
+	// Check for --dry-run flag
+	dryRun := false
+	for i := 3; i < len(os.Args); i++ {
+		if os.Args[i] == "--dry-run" {
+			dryRun = true
+			break
+		}
+	}
+
+	switch subCmd {
+	case "init":
+		projectName := filepath.Base(getCurrentDir())
+		if dryRun {
+			fmt.Println("🔍 DRY RUN: Would initialize database")
+			fmt.Printf("   Database type: %s\n", dbType)
+			fmt.Printf("   Project name: %s\n", projectName)
+			return
+		}
+		if err := database.InitDatabase(dbType, projectName); err != nil {
+			fmt.Printf("❌ Failed to init database: %v\n", err)
+		}
+	case "migrate":
+		if dryRun {
+			database.RunMigration(dbType, true)
+		} else {
+			if err := database.RunMigration(dbType, false); err != nil {
+				fmt.Printf("❌ Migration failed: %v\n", err)
+			}
+		}
+	case "seed":
+		if dryRun {
+			fmt.Println("🔍 DRY RUN: Would seed database")
+			database.SeedDatabase(dbType) // This will show preview
+		} else {
+			if err := database.SeedDatabase(dbType); err != nil {
+				fmt.Printf("❌ Seeding failed: %v\n", err)
+			}
+		}
+	case "reset":
+		if dryRun {
+			fmt.Println("🔍 DRY RUN: Would reset database (DELETE ALL DATA)")
+			fmt.Println("   This would remove all tables and data")
+		} else {
+			if err := database.ResetDatabase(dbType); err != nil {
+				fmt.Printf("❌ Reset failed: %v\n", err)
+			}
+		}
+	case "status":
+		fmt.Printf("📊 Database: %s\n", dbType)
+		// Show migration status
+	default:
+		fmt.Printf("Unknown db command: %s\n", subCmd)
+		fmt.Println("Available: init, migrate, seed, reset, status")
+	}
+}
+func getCurrentDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "my-project"
+	}
+	return dir
+}
+func createBackendOnly(path string, backendType string, withPython, withCpp bool) {
+	if withPython {
+		createPythonBackend(path)
+	} else if withCpp {
+		createCppBackend(path)
+	} else {
+		switch backendType {
+		case "go":
+			createGoBackend(path)
+		case "node":
+			createNodeBackend(path)
+		default:
+			createGoBackend(path)
+		}
+	}
+}
+func createPythonBackend(path string) {
+	// Create folder structure
+	folders := []string{
+		"app",
+		"app/api",
+		"app/models",
+		"app/schemas",
+		"tests",
+	}
+	for _, folder := range folders {
+		os.MkdirAll(filepath.Join(path, folder), 0755)
+	}
+
+	// requirements.txt
+	requirements := `fastapi==0.104.1
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+pydantic==2.5.0
+python-dotenv==1.0.0
+`
+	os.WriteFile(filepath.Join(path, "requirements.txt"), []byte(requirements), 0644)
+
+	// main.py
+	mainPy := `from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = FastAPI(title="Omarchy Python API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def root():
+    return {"message": "Omarchy Python API"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+`
+	os.WriteFile(filepath.Join(path, "app/main.py"), []byte(mainPy), 0644)
+
+	// .env
+	envFile := `DATABASE_URL=sqlite:///./app.db
+SECRET_KEY=your-secret-key-here
+`
+	os.WriteFile(filepath.Join(path, ".env"), []byte(envFile), 0644)
+
+	// Dockerfile (optional)
+	dockerfile := `FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+`
+	os.WriteFile(filepath.Join(path, "Dockerfile"), []byte(dockerfile), 0644)
+
+	fmt.Println("✅ Created Python FastAPI backend")
+}
+func createCppBackend(path string) {
+	// Create folder structure
+	folders := []string{
+		"src",
+		"include",
+		"build",
+		"tests",
+	}
+	for _, folder := range folders {
+		os.MkdirAll(filepath.Join(path, folder), 0755)
+	}
+
+	// CMakeLists.txt
+	cmake := `cmake_minimum_required(VERSION 3.20)
+project(OmarchyCppAPI)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find Crow (web framework)
+include(FetchContent)
+FetchContent_Declare(
+    crow
+    GIT_REPOSITORY https://github.com/CrowCpp/Crow.git
+    GIT_TAG v1.0.5
+)
+FetchContent_MakeAvailable(crow)
+
+add_executable(omarchy-api src/main.cpp)
+target_link_libraries(omarchy-api Crow::Crow)
+
+# Install
+install(TARGETS omarchy-api DESTINATION bin)
+`
+	os.WriteFile(filepath.Join(path, "CMakeLists.txt"), []byte(cmake), 0644)
+
+	// src/main.cpp
+	mainCpp := `#include <crow.h>
+#include <iostream>
+
+int main() {
+    crow::SimpleApp app;
+
+    CROW_ROUTE(app, "/")([](){
+        return crow::response("Omarchy C++ API");
+    });
+
+    CROW_ROUTE(app, "/health")([](){
+        crow::json::wvalue result;
+        result["status"] = "ok";
+        return result;
+    });
+
+    std::cout << "Server starting on http://localhost:8080" << std::endl;
+    app.port(8080).multithreaded().run();
+
+    return 0;
+}
+`
+	os.WriteFile(filepath.Join(path, "src/main.cpp"), []byte(mainCpp), 0644)
+
+	// Dockerfile
+	dockerfile := `FROM gcc:latest
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y cmake
+
+COPY . .
+
+RUN mkdir build && cd build && cmake .. && make
+
+CMD ["./build/omarchy-api"]
+`
+	os.WriteFile(filepath.Join(path, "Dockerfile"), []byte(dockerfile), 0644)
+
+	// .gitignore additions for C++
+	gitignoreCpp := `build/
+*.o
+*.exe
+`
+	f, _ := os.OpenFile(filepath.Join(path, ".gitignore"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f.WriteString(gitignoreCpp)
+	f.Close()
+
+	fmt.Println("✅ Created C++ Crow backend")
 }
 func createWebStructure(path string, withReact, withGo bool) {
 	folders := []string{
@@ -210,8 +490,8 @@ func main() {
 	os.WriteFile(filepath.Join(path, "main.go"), []byte(mainContent), 0644)
 }
 
-func createFullstackStructure(path string, withReact, withVue, withSvelte, withNext, withGo, withNode bool) {
-	// Frontend folder
+func createFullstackStructure(path string, withReact, withVue, withSvelte, withNext, withGo, withNode, withPython, withCpp bool) {
+	// Frontend folder (same as before)
 	var frontendPath string
 	switch {
 	case withReact:
@@ -234,6 +514,12 @@ func createFullstackStructure(path string, withReact, withVue, withSvelte, withN
 	}
 	if withNode {
 		createNodeBackend(filepath.Join(path, "backend-node"))
+	}
+	if withPython {
+		createPythonBackend(filepath.Join(path, "backend-python"))
+	}
+	if withCpp {
+		createCppBackend(filepath.Join(path, "backend-cpp"))
 	}
 }
 func createVueFiles(path string) {
@@ -661,9 +947,22 @@ func handleCountCommand(ctx context.Context) {
 	}
 }
 func handleTreeCommand(ctx context.Context) {
+	// Parse depth flag
+	depth := 0
+	for i := 2; i < len(os.Args); i++ {
+		if os.Args[i] == "--depth" && i+1 < len(os.Args) {
+			fmt.Sscanf(os.Args[i+1], "%d", &depth)
+			i++
+		}
+	}
+
 	root := "."
-	fmt.Printf("📂 Directory tree for: %s\n", root)
-	tree.Print(ctx, root)
+	if depth > 0 {
+		fmt.Printf("📂 Directory tree for: %s (max depth: %d)\n", root, depth)
+	} else {
+		fmt.Printf("📂 Directory tree for: %s\n", root)
+	}
+	tree.Print(ctx, root, depth)
 }
 func RunGoBuild(name string) error {
 	outputName := name
@@ -726,14 +1025,25 @@ COMMANDS:
     omarchy list-templates                        List all saved templates
     omarchy delete-template <name>                Delete a saved template
 
-  Git:
-    omarchy sync [-a] [-m "message"]             Auto commit and push changes
-    omarchy sync --dry-run                       Preview what would happen
+Database:
+   omarchy db init                     Initialize database
+   omarchy db migrate                  Run migrations
+   omarchy db migrate --dry-run        Preview migrations without running
+   omarchy db seed                     Seed database
+   omarchy db reset                    Reset database (DESTROYS DATA)
+   omarchy db reset --dry-run          Preview reset
+   omarchy db status                   Show migration status
+
+Git:
+  omarchy sync                      Commit with default message
+  omarchy sync -a                   Auto-generate commit message
+  omarchy sync -m "message"         Commit with custom message
+  omarchy sync --dry-run            Preview what would happen
 
   Utilities:
     omarchy doctor                               Check development environment
     omarchy count [ext] [-r]                     Count files by extension
-    omarchy tree                                 Show directory tree
+    omarchy tree [--depth N]     Show directory tree (limit depth with --depth)
     omarchy version                              Show version
 	omarchy tree-build [--preview] [--from file]    Create files/folders from tree structure
 
@@ -755,6 +1065,8 @@ FRONTEND OPTIONS (for fullstack/web):
 BACKEND OPTIONS (for fullstack/backend):
   -go          Add Go backend with Gin
   -node        Add Node.js backend with Express
+  -python      Add Python backend with FastAPI
+  -cpp         Add C++ backend with Crow
 
 OTHER OPTIONS:
   -name <name>          Project name (default: my-project)
