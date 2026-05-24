@@ -22,7 +22,7 @@ import (
 	"strings"
 )
 
-var Version = "v1.13.0"
+var Version = "v1.13.1"
 
 func main() {
 	config := config.LoadConfig()
@@ -103,6 +103,9 @@ func main() {
 			return
 		case "version", "--version":
 			fmt.Println("Omarchy" + Version)
+			return
+		case "fix-git-home":
+			gitsupport.HandleFixGitInHome()
 			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])

@@ -4,12 +4,31 @@ import (
 	"context"
 	"fmt"
 	"omarchy/pkg/support"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func GitSync(ctx context.Context, autoMsg bool, customMsg string) {
+	homeDir, _ := os.UserHomeDir()
+	currentDir, _ := os.Getwd()
+
+	if currentDir == homeDir {
+		support.PrintError("Cannot run 'omarchy sync' in home directory!")
+		support.PrintInfo("This would try to commit your entire home folder.")
+		support.PrintInfo("Move to a project folder first: cd ~/Documents/vs code/")
+		return
+	}
+
+	// Check if .git exists in home
+	if _, err := os.Stat(filepath.Join(homeDir, ".git")); err == nil {
+		support.PrintWarning("Detected .git folder in home directory!")
+		support.PrintInfo("Run: rm -rf ~/.git")
+	}
+
 	select {
 	case <-ctx.Done():
 		fmt.Println("❌ Sync cancelled")
@@ -164,4 +183,207 @@ func CheckGitConfig() (string, string, error) {
 	userEmail := strings.TrimSpace(string(emailOutput))
 	support.PrintSuccessf("Git user: %s <%s>", userName, userEmail)
 	return userName, userEmail, nil
+}
+func CheckGitInHome() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	gitPath := filepath.Join(homeDir, ".git")
+	info, err := os.Stat(gitPath)
+	if err != nil {
+		// No .git in home - good!
+		return
+	}
+
+	if info.IsDir() {
+		support.PrintError("❌ CRITICAL: .git folder found in home directory!")
+		support.PrintWarning("   Your entire home folder is being tracked by git.")
+		support.PrintInfo("   This will slow down your computer and git commands.")
+		support.PrintInfo("   Fix: rm -rf ~/.git")
+		support.PrintInfo("   Then: cd ~/Documents/vs\\ code/omarchy")
+		support.PrintInfo("   Then: git init (in the correct folder)")
+	}
+}
+
+func CheckGitInDesktop() {
+	desktop := filepath.Join(os.Getenv("USERPROFILE"), "Desktop")
+	if _, err := os.Stat(filepath.Join(desktop, ".git")); err == nil {
+		support.PrintWarning("⚠️ .git folder found on Desktop!")
+		support.PrintInfo("   Move your project to Documents/vs code/")
+	}
+}
+
+func CheckGitInDownloads() {
+	downloads := filepath.Join(os.Getenv("USERPROFILE"), "Downloads")
+	if _, err := os.Stat(filepath.Join(downloads, ".git")); err == nil {
+		support.PrintWarning("⚠️ .git folder found in Downloads!")
+		support.PrintInfo("   Move your project to Documents/vs code/")
+	}
+}
+func CheckGitInDocuments() {
+	docs := filepath.Join(os.Getenv("USERPROFILE"), "Documents")
+	gitPath := filepath.Join(docs, ".git")
+
+	if _, err := os.Stat(gitPath); err == nil {
+		// This is actually okay if it's a project
+		// But we can still check if it's the root
+		support.PrintInfo("ℹ️ .git found in Documents (may be a project)")
+	}
+}
+func CheckNodeModulesSize() {
+	nodeModules := filepath.Join(".", "node_modules")
+	if _, err := os.Stat(nodeModules); err == nil {
+		size := GetDirSize(nodeModules)
+		if size > 500*1024*1024 { // 500MB
+			support.PrintWarning(fmt.Sprintf("⚠️ node_modules is %.1f GB", float64(size)/(1024*1024*1024)))
+			support.PrintInfo("   Run: npm prune or yarn autoclean")
+		} else if size > 100*1024*1024 {
+			support.PrintInfo(fmt.Sprintf("ℹ️ node_modules size: %.1f MB", float64(size)/(1024*1024)))
+		}
+	}
+}
+func CheckDiskSpace() {
+	cmd := exec.Command("wmic", "logicaldisk", "where", "DeviceID='C:'", "get", "FreeSpace")
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(output), "\n")
+	if len(lines) > 1 {
+		freeStr := strings.TrimSpace(lines[1])
+		freeBytes, err := strconv.ParseUint(freeStr, 10, 64)
+		if err == nil {
+			freeGB := float64(freeBytes) / (1024 * 1024 * 1024)
+			fmt.Printf("✅ %.1f GB free\n", freeGB)
+		}
+	}
+}
+func CheckCommonEnvVars() {
+	vars := []string{"GOPATH", "GOROOT", "PATH", "HOME"}
+	for _, v := range vars {
+		if val := os.Getenv(v); val != "" {
+			if v == "PATH" && len(val) > 500 {
+				support.PrintInfo(fmt.Sprintf("ℹ️ %s is set (length: %d)", v, len(val)))
+			} else if val != "" {
+				support.PrintSuccess(fmt.Sprintf("✅ %s is set", v))
+			}
+		}
+	}
+}
+func CheckLargeFilesInGit() {
+	repoRoot, err := isGitRepo()
+	if err != nil || !repoRoot {
+		return
+	}
+
+	cmd := exec.Command("git", "ls-files", "-s")
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(output), "\n")
+	largeFiles := 0
+	for _, line := range lines {
+		parts := strings.Fields(line)
+		if len(parts) >= 4 {
+			size, _ := strconv.Atoi(parts[3])
+			if size > 10*1024*1024 { // 10MB
+				largeFiles++
+			}
+		}
+	}
+
+	if largeFiles > 0 {
+		support.PrintWarning(fmt.Sprintf("⚠️ %d large files tracked in git (>10MB)", largeFiles))
+		support.PrintInfo("   Consider using git-lfs or .gitignore")
+	}
+}
+func CheckVSCodeExtensions() {
+	homeDir, _ := os.UserHomeDir()
+	extDir := filepath.Join(homeDir, ".vscode", "extensions")
+
+	if _, err := os.Stat(extDir); err == nil {
+		entries, _ := os.ReadDir(extDir)
+		extCount := len(entries)
+
+		if extCount > 50 {
+			support.PrintWarning(fmt.Sprintf("⚠️ %d VS Code extensions installed", extCount))
+			support.PrintInfo("   Too many extensions may slow down VS Code")
+		} else {
+			support.PrintSuccess(fmt.Sprintf("✅ %d extensions installed", extCount))
+		}
+	}
+}
+func CheckOmarchyVersion() {
+	cmd := exec.Command("omarchy", "--version")
+	output, err := cmd.Output()
+	if err != nil {
+		support.PrintWarning("⚠️ Could not check Omarchy version")
+		return
+	}
+
+	version := strings.TrimSpace(string(output))
+	support.PrintSuccess(fmt.Sprintf("✅ Omarchy %s", version))
+
+	// Check if update available (simplified)
+	support.PrintInfo("   Run 'omarchy update' to check for updates")
+}
+func GetDirSize(path string) int64 {
+	var size int64
+	filepath.WalkDir(path, func(_ string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			info, _ := d.Info()
+			size += info.Size()
+		}
+		return nil
+	})
+	return size
+}
+func HandleFixGitInHome() {
+	homeDir, _ := os.UserHomeDir()
+	gitPath := filepath.Join(homeDir, ".git")
+
+	if _, err := os.Stat(gitPath); os.IsNotExist(err) {
+		fmt.Println("✅ No .git folder found in home directory.")
+		return
+	}
+
+	fmt.Println("⚠️ Found .git folder in home directory!")
+	fmt.Println("   This will be deleted.")
+	fmt.Print("   Are you sure? (y/N): ")
+
+	var resp string
+	fmt.Scanln(&resp)
+	if resp != "y" && resp != "Y" {
+		fmt.Println("Aborted.")
+		return
+	}
+
+	err := os.RemoveAll(gitPath)
+	if err != nil {
+		fmt.Printf("❌ Failed to remove: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ Removed .git from home directory.")
+	fmt.Println("   You can now git init in the correct project folder.")
+}
+func CheckUntrackedFiles() {
+	cmd := exec.Command("git", "ls-files", "--others", "--exclude-standard")
+	output, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	untracked := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(untracked) > 0 && untracked[0] != "" {
+		support.PrintWarning(fmt.Sprintf("⚠️ %d untracked files in git", len(untracked)))
+		support.PrintInfo("   Run 'git status' to see untracked files")
+	}
 }
