@@ -1101,6 +1101,10 @@ CONFIGURATION:
 VERSION:
   Omarchy %s
 
+FEEDBACK:
+  Found a bug or have a suggestion? Open an issue on GitHub:
+  https://github.com/Taha95-dev/Omarchy-CLI-tool/issues/new
+
 For more information: https://github.com/Taha95-dev/Omarchy-CLI-tool
 `, Version)
 }
