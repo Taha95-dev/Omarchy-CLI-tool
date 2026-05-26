@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"omarchy/pkg/backup"
+	"omarchy/pkg/cleanup"
 	"omarchy/pkg/config"
 	"omarchy/pkg/counter"
 	"omarchy/pkg/database"
 	"omarchy/pkg/deploy"
+	"omarchy/pkg/disk"
 	"omarchy/pkg/doctor"
+	"omarchy/pkg/find"
 	"omarchy/pkg/gitsupport"
 	"omarchy/pkg/support"
 	"omarchy/pkg/templates"
@@ -24,7 +28,7 @@ import (
 	"strings"
 )
 
-var Version = "v2.0.0"
+var Version = "v2.1.0"
 
 func main() {
 	config := config.LoadConfig()
@@ -122,6 +126,18 @@ func main() {
 			}
 			handleDBCommand()
 			return
+		case "du":
+			handleDiskUsageCommand()
+			return
+		case "backup":
+			handleBackupCommand()
+			return
+		case "cleanup", "c-up":
+			handleCleanupCommand()
+			return
+		case "find", "f":
+			handleFindCommand()
+			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
 			fmt.Println("Run 'omarchy help' for available commands")
@@ -192,6 +208,154 @@ func HandleDeployCommand() {
 
 	if err := deploy.Deploy(detectedPlatform, projectType, projectName); err != nil {
 		fmt.Printf("❌ Deployment failed: %v\n", err)
+	}
+}
+func handleFindCommand() {
+	findCmd := flag.NewFlagSet("find", flag.ExitOnError)
+	pattern := findCmd.String("pattern", "", "Search pattern")
+	name := findCmd.String("name", "", "Exact filename")
+	ext := findCmd.String("ext", "", "File extension")
+	ftype := findCmd.String("type", "", "File type (f=file, d=directory)")
+	size := findCmd.String("size", "", "Size filter (+10M, -1G, 500K)")
+	maxDepth := findCmd.Int("depth", 0, "Max depth")
+	caseSensitive := findCmd.Bool("case", false, "Case sensitive")
+	useRegex := findCmd.Bool("regex", false, "Use regex pattern")
+	verbose := findCmd.Bool("v", false, "Verbose output")
+	findCmd.Parse(os.Args[2:])
+
+	path := "."
+	if findCmd.NArg() > 0 {
+		path = findCmd.Arg(0)
+	}
+
+	opts := find.FindOptions{
+		Pattern:       *pattern,
+		Type:          *ftype,
+		Name:          *name,
+		Extension:     *ext,
+		Size:          *size,
+		MaxDepth:      *maxDepth,
+		CaseSensitive: *caseSensitive,
+		UseRegex:      *useRegex,
+	}
+
+	results, err := find.Find(path, opts)
+	if err != nil {
+		fmt.Printf("❌ Find failed: %v\n", err)
+		return
+	}
+
+	find.PrintResults(results, *verbose)
+}
+func handleCleanupCommand() {
+	cleanupCmd := flag.NewFlagSet("cleanup", flag.ExitOnError)
+	dryRun := cleanupCmd.Bool("dry-run", false, "Preview what would be deleted")
+	all := cleanupCmd.Bool("all", false, "Deep clean (node_modules, .cache, etc.)")
+	cleanupCmd.Parse(os.Args[2:])
+
+	path := "."
+	if cleanupCmd.NArg() > 0 {
+		path = cleanupCmd.Arg(0)
+	}
+
+	// Expand tilde
+	if strings.HasPrefix(path, "~") {
+		home, _ := os.UserHomeDir()
+		path = filepath.Join(home, path[1:])
+	}
+
+	opts := cleanup.CleanupOptions{
+		DryRun: *dryRun,
+		All:    *all,
+	}
+
+	if *dryRun {
+		fmt.Println("🔍 Cleanup dry run - what would be deleted:")
+	} else {
+		fmt.Println("🧹 Cleaning up...")
+	}
+
+	deleted, totalSize, err := cleanup.RunCleanup(path, opts)
+	if err != nil {
+		fmt.Printf("❌ Cleanup failed: %v\n", err)
+		return
+	}
+
+	if len(deleted) == 0 {
+		fmt.Println("   Nothing to clean up")
+		return
+	}
+
+	if *dryRun {
+		fmt.Printf("\n📊 Would free: %s\n", cleanup.FormatSize(totalSize))
+	} else {
+		fmt.Printf("\n✅ Cleanup complete! Freed: %s\n", cleanup.FormatSize(totalSize))
+	}
+}
+func handleBackupCommand() {
+	backupCmd := flag.NewFlagSet("backup", flag.ExitOnError)
+	dest := backupCmd.String("dest", ".", "Destination directory for backup")
+	name := backupCmd.String("name", "", "Custom backup name")
+	backupCmd.Parse(os.Args[2:])
+
+	source := "."
+	if backupCmd.NArg() > 0 {
+		source = backupCmd.Arg(0)
+	}
+
+	// Convert to absolute path for better handling
+	absSource, err := filepath.Abs(source)
+	if err != nil {
+		fmt.Printf("❌ Invalid source path: %v\n", err)
+		return
+	}
+
+	// Check if source exists
+	if _, err := os.Stat(absSource); os.IsNotExist(err) {
+		fmt.Printf("❌ Source does not exist: %s\n", source)
+		fmt.Printf("   Try using absolute path or check the folder name\n")
+		return
+	}
+
+	opts := backup.BackupOptions{
+		Source: absSource,
+		Dest:   *dest,
+		Name:   *name,
+	}
+
+	if err := backup.CreateBackup(opts); err != nil {
+		fmt.Printf("❌ Backup failed: %v\n", err)
+	}
+}
+func handleDiskUsageCommand() {
+	depth := 2
+	path := "."
+
+	// Parse args...
+
+	// First, replace any backslashes with forward slashes for consistent handling
+	path = strings.ReplaceAll(path, "\\", "/")
+
+	// Expand tilde
+	if strings.HasPrefix(path, "~") {
+		home, _ := os.UserHomeDir()
+		rest := strings.TrimPrefix(path, "~")
+		path = filepath.Join(home, rest)
+	}
+
+	// Convert to system path
+	path = filepath.FromSlash(path)
+
+	// Get absolute path
+	absPath, err := filepath.Abs(path)
+	if err == nil {
+		path = absPath
+	}
+
+	fmt.Printf("DEBUG: Final path = %s\n", path)
+
+	if err := disk.ShowDiskUsage(path, depth, true); err != nil {
+		fmt.Printf("❌ Error: %v\n", err)
 	}
 }
 func handleDBCommand() {
@@ -1046,6 +1210,18 @@ Git:
     omarchy tree [--depth N]     Show directory tree (limit depth with --depth)
     omarchy version                              Show version
 	omarchy tree-build [--preview] [--from file]    Create files/folders from tree structure
+	omarchy du [path] [--depth N]    Show disk usage (like du command)
+	omarchy backup [path] [--dest DIR] [--name NAME]    Create zip backup of project
+	omarchy cleanup [--dry-run] [--all]    Remove temporary files and old backups
+	omarchy find [path] --pattern TEXT    Search for files/directories
+  --name NAME        Exact filename
+  --ext EXT          File extension
+  --type f|d         File or directory only
+  --size +10M        Size filter (K, M, G)
+  --depth N          Max depth
+  --regex            Use regex pattern
+  --case             Case sensitive
+  -v                 Verbose output
 
   Help:
     omarchy help, omarchy --help                 Show this help message

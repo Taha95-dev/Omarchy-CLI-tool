@@ -1,44 +1,38 @@
-## 🚀 Omarchy v2.0.0 - The Major Release
+## 🚀 Omarchy v2.1.0 - Utility & Search Release
 
-### What's New
+### New Commands
 
-**✨ Deploy Command**
+**💾 Disk Usage (`du`)**
 
-- One-command deployment to Render, Netlify, Vercel
-- Auto-detects project type
-- Creates platform configs
+- Check directory sizes
+- Limit depth with `--depth`
+- Human-readable output
 
-**🗄️ Database Management**
+**📦 Backup**
 
-- `omarchy db init` - Initialize database
-- `omarchy db migrate` - Run migrations
-- `omarchy db migrate --dry-run` - Preview safely
-- `omarchy db seed` - Seed data
-- `omarchy db reset` - Reset (with --dry-run)
-- Supports PostgreSQL, MySQL, SQLite
+- One-command project backup
+- Progress indicator
+- Custom backup names
+- Auto-skips node_modules, .git
 
-**🐍 Python Backend**
+**🧹 Cleanup**
 
-- FastAPI framework
-- Docker support
-- Requirements.txt included
+- Remove temporary files, old backups
+- `--dry-run` to preview
+- `--all` for deep clean
 
-**⚙️ C++ Backend**
+**🔍 Find**
 
-- Crow web framework
-- CMake build system
-- Docker support
+- Search files by pattern, name, extension
+- Filter by type, size, depth
+- Regex support
+- Verbose output with sizes
 
-**🌳 Tree Improvements**
+### Improvements
 
-- `omarchy tree --depth N` - Limit depth
-- Skips hidden folders and node_modules
-
-**🛡️ Safety Features**
-
-- `--dry-run` for destructive operations
-- Better error messages
-- Confirmation prompts
+- Progress bars for long operations
+- Better Windows path handling
+- Self-dogfooding with `du`, `cleanup`
 
 ### Installation
 
