@@ -1197,6 +1197,7 @@ Database:
    omarchy db reset                    Reset database (DESTROYS DATA)
    omarchy db reset --dry-run          Preview reset
    omarchy db status                   Show migration status
+   
 
 Git:
   omarchy sync                      Commit with default message

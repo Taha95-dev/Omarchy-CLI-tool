@@ -13,7 +13,7 @@
 - One-command project backup
 - Progress indicator
 - Custom backup names
-- Auto-skips node_modules, .git
+- Auto-skips node_modules, .git, .vs
 
 **🧹 Cleanup**
 
@@ -21,7 +21,7 @@
 - `--dry-run` to preview
 - `--all` for deep clean
 
-**🔍 Find**
+**🔍 Find **
 
 - Search files by pattern, name, extension
 - Filter by type, size, depth
