@@ -5,7 +5,7 @@
 **💾 Disk Usage (`du`)**
 
 - Check directory sizes
-- Limit depth with `--depth`
+- Limit depth with `--depth [value]`
 - Human-readable output
 
 **📦 Backup**
@@ -44,7 +44,7 @@ go install github.com/Taha95-dev/Omarchy-CLI-tool@latest
 
 I'd love to hear about your experience with Omarchy!
 
-**Your feedback helps me improve:**
+** Your feedback helps me improve: **
 
 - What worked well?
 - What was confusing?
