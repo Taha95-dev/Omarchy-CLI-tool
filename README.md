@@ -1,40 +1,24 @@
-## 🚀 Omarchy v2.1.0 - Utility & Search Release
+## 🎉 Omarchy v2.2.0 - Utility Update
 
-### New Commands
+### ✨ New Features
 
-**💾 Disk Usage (`du`)**
+| Command                                   | What it does                                |
+| ----------------------------------------- | ------------------------------------------- |
+| `omarchy deploy --auto`                   | Deploy without prompts — faster, scriptable |
+| `omarchy deploy --auto --platform vercel` | Specify platform + auto mode                |
 
-- Check directory sizes
-- Limit depth with `--depth [value]`
-- Human-readable output
+### 🔧 Improvements
 
-**📦 Backup**
+- Better error messages for database commands
+- Improved Windows path handling
+- Faster `tree` command (excludes .git and node_modules)
 
-- One-command project backup
-- Progress indicator
-- Custom backup names
-- Auto-skips node_modules, .git, .vs
+### 🛡️ Safety
 
-**🧹 Cleanup**
+- `omarchy sync` now detects .git in home folder and warns
+- `omarchy cleanup --all` more thorough but safe
 
-- Remove temporary files, old backups
-- `--dry-run` to preview
-- `--all` for deep clean
-
-**🔍 Find **
-
-- Search files by pattern, name, extension
-- Filter by type, size, depth
-- Regex support
-- Verbose output with sizes
-
-### Improvements
-
-- Progress bars for long operations
-- Better Windows path handling
-- Self-dogfooding with `du`, `cleanup`
-
-### Installation
+### 📦 Install
 
 ```bash
 go install github.com/Taha95-dev/Omarchy-CLI-tool@latest

@@ -28,7 +28,7 @@ import (
 	"strings"
 )
 
-var Version = "v2.1.0"
+var Version = "v2.2.0"
 
 func main() {
 	config := config.LoadConfig()
@@ -138,6 +138,13 @@ func main() {
 		case "find", "f":
 			handleFindCommand()
 			return
+		case "config":
+			if len(os.Args) < 3 {
+				fmt.Println("Usage: omarchy config <--edit|--path|--list>")
+				return
+			}
+			handleConfigCommand()
+			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
 			fmt.Println("Run 'omarchy help' for available commands")
@@ -187,9 +194,65 @@ func main() {
 	}
 	fmt.Printf("✅ Created %s project: %s\n", *projectType, *projectName)
 }
+func handleConfigCommand() {
+	if len(os.Args) < 3 {
+		fmt.Println("❌ Missing subcommand")
+		fmt.Println("Usage: omarchy config --edit")
+		fmt.Println("       omarchy config --path")
+		fmt.Println("       omarchy config --list")
+		return
+	}
+
+	configPath := config.GetConfigPath() // You'll need this function
+
+	switch os.Args[2] {
+	case "--edit", "-e":
+		// Open config in editor
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = os.Getenv("VISUAL")
+		}
+		if editor == "" {
+			// Fallback based on OS
+			if runtime.GOOS == "windows" {
+				editor = "notepad"
+			} else {
+				editor = "nano"
+			}
+		}
+
+		cmd := exec.Command(editor, configPath)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("❌ Failed to open editor: %v\n", err)
+			fmt.Printf("   You can manually edit: %s\n", configPath)
+			return
+		}
+		fmt.Printf("✅ Config saved. Run 'omarchy doctor' to validate.\n")
+
+	case "--path", "-p":
+		fmt.Println(configPath)
+
+	case "--list", "-l":
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			fmt.Printf("❌ Failed to read config: %v\n", err)
+			return
+		}
+		fmt.Println(string(data))
+
+	default:
+		fmt.Printf("❌ Unknown config subcommand: %s\n", os.Args[2])
+		fmt.Println("Available: --edit, --path, --list")
+	}
+}
 func HandleDeployCommand() {
 	deployCmd := flag.NewFlagSet("deploy", flag.ExitOnError)
 	platform := deployCmd.String("platform", "render", "Deployment platform")
+	auto := deployCmd.Bool("auto", false, "Auto-deploy without prompts")
 	deployCmd.Parse(os.Args[2:])
 
 	projectType := deploy.DetectProjectType()
@@ -206,7 +269,8 @@ func HandleDeployCommand() {
 
 	projectName := filepath.Base(getCurrentDir())
 
-	if err := deploy.Deploy(detectedPlatform, projectType, projectName); err != nil {
+	// Call Deploy with auto flag
+	if err := deploy.Deploy(detectedPlatform, projectType, projectName, *auto); err != nil {
 		fmt.Printf("❌ Deployment failed: %v\n", err)
 	}
 }

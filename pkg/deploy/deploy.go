@@ -174,46 +174,102 @@ jobs:
 	return os.WriteFile(".github/workflows/deploy.yml", []byte(content), 0644)
 }
 
-func Deploy(platform Platform, projectType ProjectType, projectName string) error {
-	fmt.Printf("🚀 Deploying %s project to %s...\n", projectType, platform)
-
-	// Step 1: Generate config file
-	if err := GenerateConfig(projectType, platform); err != nil {
-		return fmt.Errorf("failed to generate config: %w", err)
+// Deploy with auto flag (skip interactive prompts)
+func Deploy(platform Platform, projectType ProjectType, projectName string, auto bool) error {
+	if auto {
+		fmt.Printf("🚀 Auto-deploying %s project to %s...\n", projectType, platform)
+	} else {
+		fmt.Printf("🚀 Deploying %s project to %s...\n", projectType, platform)
 	}
-	fmt.Printf("✅ Generated %s config\n", platform)
 
-	// Step 2: Commit and push (if git repo)
+	// Check if config already exists (skip generation if auto)
+	configExists := false
+	switch platform {
+	case Render:
+		_, err := os.Stat("render.yaml")
+		configExists = err == nil
+	case Netlify:
+		_, err := os.Stat("netlify.toml")
+		configExists = err == nil
+	case Vercel:
+		_, err := os.Stat("vercel.json")
+		configExists = err == nil
+	case Github:
+		_, err := os.Stat(".github/workflows/deploy.yml")
+		configExists = err == nil
+	}
+
+	if !configExists {
+		// Step 1: Generate config file
+		if err := GenerateConfig(projectType, platform); err != nil {
+			return fmt.Errorf("failed to generate config: %w", err)
+		}
+		fmt.Printf("✅ Generated %s config\n", platform)
+	} else if !auto {
+		fmt.Printf("⚠️  %s config already exists. Skipping generation.\n", platform)
+	}
+
+	// Step 2: Commit and push (if git repo) - skip prompts in auto mode
 	if _, err := os.Stat(".git"); err == nil {
+		if !auto {
+			fmt.Print("Commit and push changes? (y/n): ")
+			var response string
+			fmt.Scanln(&response)
+			if response != "y" && response != "yes" {
+				fmt.Println("Skipping git push. You'll need to push manually.")
+				goto deployInstructions
+			}
+		}
 		runCmd("git", "add", ".")
 		runCmd("git", "commit", "-m", "Add deploy config for "+string(platform))
 		runCmd("git", "push")
 		fmt.Println("✅ Pushed to GitHub")
 	}
 
-	// Step 3: Platform-specific instructions
+deployInstructions:
+	// Step 3: Platform-specific instructions (shorter in auto mode)
 	switch platform {
 	case Render:
-		fmt.Println("\n🌐 To deploy on Render:")
-		fmt.Println("   1. Go to https://render.com")
-		fmt.Println("   2. Click 'New +' → 'Web Service'")
-		fmt.Println("   3. Connect your GitHub repository")
-		fmt.Println("   4. Render will auto-detect render.yaml")
-		fmt.Println("   5. Click 'Apply'")
+		if auto {
+			fmt.Println("\n✅ Auto-deploy prepared! Run this command to deploy:")
+			fmt.Printf("   cd %s && git push\n", projectName)
+			fmt.Println("\n   Then go to https://dashboard.render.com and connect your repo")
+		} else {
+			fmt.Println("\n🌐 To deploy on Render:")
+			fmt.Println("   1. Go to https://render.com")
+			fmt.Println("   2. Click 'New +' → 'Web Service'")
+			fmt.Println("   3. Connect your GitHub repository")
+			fmt.Println("   4. Render will auto-detect render.yaml")
+			fmt.Println("   5. Click 'Apply'")
+		}
 	case Netlify:
-		fmt.Println("\n🌐 To deploy on Netlify:")
-		fmt.Println("   1. Go to https://netlify.com")
-		fmt.Println("   2. Drag and drop your project folder")
-		fmt.Println("   3. Or connect GitHub")
+		if auto {
+			fmt.Println("\n✅ Auto-deploy prepared! Run:")
+			fmt.Printf("   cd %s && git push\n", projectName)
+			fmt.Println("   Then drag folder to https://app.netlify.com/drop")
+		} else {
+			fmt.Println("\n🌐 To deploy on Netlify:")
+			fmt.Println("   1. Go to https://netlify.com")
+			fmt.Println("   2. Drag and drop your project folder")
+			fmt.Println("   3. Or connect GitHub")
+		}
 	case Vercel:
-		fmt.Println("\n🌐 To deploy on Vercel:")
-		fmt.Println("   1. Go to https://vercel.com")
-		fmt.Println("   2. Import your GitHub repository")
-		fmt.Println("   3. Vercel auto-detects vercel.json")
+		if auto {
+			fmt.Println("\n✅ Auto-deploy prepared! Run:")
+			fmt.Printf("   cd %s && vercel --prod\n", projectName)
+		} else {
+			fmt.Println("\n🌐 To deploy on Vercel:")
+			fmt.Println("   1. Go to https://vercel.com")
+			fmt.Println("   2. Import your GitHub repository")
+			fmt.Println("   3. Vercel auto-detects vercel.json")
+		}
 	case Github:
-		fmt.Println("\n🌐 GitHub Pages deployment:")
-		fmt.Println("   GitHub Actions workflow created!")
-		fmt.Println("   Push to main to trigger auto-deploy")
+		fmt.Println("\n✅ GitHub Actions workflow created!")
+		if auto {
+			fmt.Println("   Push to main to trigger auto-deploy")
+		} else {
+			fmt.Println("   Push to main to trigger auto-deploy")
+		}
 	}
 
 	return nil

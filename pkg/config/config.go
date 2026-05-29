@@ -33,3 +33,10 @@ func LoadConfig() Config {
 	fmt.Println("✅ Config loaded from:", configPath)
 	return config
 }
+func GetConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".omarchy.yaml"
+	}
+	return filepath.Join(home, ".omarchy.yaml")
+}
