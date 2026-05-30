@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func GitSync(ctx context.Context, autoMsg bool, customMsg string) {
+func GitSync(ctx context.Context, autoMsg bool, customMsg, tag string) {
 	homeDir, _ := os.UserHomeDir()
 	currentDir, _ := os.Getwd()
 
@@ -92,6 +92,28 @@ func GitSync(ctx context.Context, autoMsg bool, customMsg string) {
 	} else {
 		support.PrintWarning("No remote configured. Commit saved locally only.")
 		support.PrintInfo("Run: git remote add origin <url>")
+	}
+	// After push, handle tag
+	if tag != "" {
+		fmt.Printf("🏷️ Creating tag: %s\n", tag)
+
+		// Check if tag exists
+		if err := exec.Command("git", "rev-parse", tag).Run(); err == nil {
+			fmt.Printf("⚠️ Tag %s already exists. Skipping.\n", tag)
+			return
+		}
+
+		// Create tag
+		tagMsg := fmt.Sprintf("Release %s", tag)
+		if customMsg != "" {
+			tagMsg = customMsg
+		}
+		exec.Command("git", "tag", "-a", tag, "-m", tagMsg).Run()
+		fmt.Printf("✅ Created tag: %s\n", tag)
+
+		// Push tag
+		exec.Command("git", "push", "origin", tag).Run()
+		fmt.Printf("✅ Pushed tag %s to origin\n", tag)
 	}
 }
 

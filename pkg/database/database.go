@@ -297,3 +297,107 @@ func ResetDatabase(dbType DatabaseType) error {
 
 	return nil
 }
+
+// PreviewReset shows what tables would be dropped (dry-run)
+func PreviewReset(dbType DatabaseType) error {
+	fmt.Println("🔍 DRY RUN: Tables that will be dropped:")
+
+	tables, err := GetTableNames(dbType)
+	if err != nil {
+		fmt.Printf("  ⚠️ Could not list tables: %v\n", err)
+		return err
+	}
+
+	if len(tables) == 0 {
+		fmt.Println("  (no tables found)")
+		return nil
+	}
+
+	for _, table := range tables {
+		rowCount := GetTableRowCount(dbType, table)
+		fmt.Printf("  - %s (%d rows)\n", table, rowCount)
+	}
+
+	return nil
+}
+
+// getTableNames returns all user table names from the database
+func GetTableNames(dbType DatabaseType) ([]string, error) {
+	// Read DATABASE_URL from .env
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return nil, fmt.Errorf("DATABASE_URL not set. Run 'omarchy db init' first")
+	}
+
+	switch dbType {
+	case SQLite:
+		// For SQLite, we can query directly
+		dbPath := extractSQLitePath(url)
+		if dbPath == "" {
+			return nil, fmt.Errorf("could not extract database path from DATABASE_URL")
+		}
+
+		cmd := exec.Command("sqlite3", dbPath, "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';")
+		output, err := cmd.Output()
+		if err != nil {
+			return nil, err
+		}
+
+		tables := strings.Split(strings.TrimSpace(string(output)), "\n")
+		// Filter empty lines
+		var result []string
+		for _, t := range tables {
+			if t != "" {
+				result = append(result, t)
+			}
+		}
+		return result, nil
+
+	case PostgreSQL, MySQL:
+		// For PostgreSQL/MySQL, we'd need a proper connection
+		// This is a placeholder — you'd use the actual database driver
+		fmt.Println("  ⚠️ Table listing for PostgreSQL/MySQL requires database driver")
+		fmt.Println("  Install with: go get -u gorm.io/driver/postgres")
+		return nil, fmt.Errorf("postgres/mysql table listing not yet implemented")
+
+	default:
+		return nil, fmt.Errorf("unsupported database type: %s", dbType)
+	}
+}
+
+// getTableRowCount returns number of rows in a table
+func GetTableRowCount(dbType DatabaseType, tableName string) int {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return 0
+	}
+
+	switch dbType {
+	case SQLite:
+		dbPath := extractSQLitePath(url)
+		if dbPath == "" {
+			return 0
+		}
+
+		cmd := exec.Command("sqlite3", dbPath, fmt.Sprintf("SELECT COUNT(*) FROM %s;", tableName))
+		output, err := cmd.Output()
+		if err != nil {
+			return 0
+		}
+
+		var count int
+		fmt.Sscanf(string(output), "%d", &count)
+		return count
+
+	default:
+		return 0
+	}
+}
+
+// extractSQLitePath gets the file path from SQLite DATABASE_URL
+func extractSQLitePath(url string) string {
+	// Remove sqlite:// prefix
+	path := strings.TrimPrefix(url, "sqlite://")
+	path = strings.TrimPrefix(path, "sqlite:")
+	return path
+}

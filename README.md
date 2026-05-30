@@ -1,22 +1,22 @@
-## 🎉 Omarchy v2.2.0 - Utility Update
+## 🎉 Omarchy v2.3.0 - No More Tears Update
 
-### ✨ New Features
+### 🛡️ Database Safety (Finally)
 
-| Command                                   | What it does                                |
-| ----------------------------------------- | ------------------------------------------- |
-| `omarchy deploy --auto`                   | Deploy without prompts — faster, scriptable |
-| `omarchy deploy --auto --platform vercel` | Specify platform + auto mode                |
+| Command                     | What changed                             |
+| --------------------------- | ---------------------------------------- |
+| `omarchy db reset`          | Auto dry-run → "DELETE" → "I UNDERSTAND" |
+| `omarchy db migrate` (prod) | Requires `--dry-run` + `--force`         |
+| `omarchy db seed` (prod)    | "SEED" confirmation required             |
 
-### 🔧 Improvements
+**No more accidental production database wipes.**
 
-- Better error messages for database commands
-- Improved Windows path handling
-- Faster `tree` command (excludes .git and node_modules)
+### ⚡ Git Improvements
 
-### 🛡️ Safety
-
-- `omarchy sync` now detects .git in home folder and warns
-- `omarchy cleanup --all` more thorough but safe
+| Command                     | What it does                                   |
+| --------------------------- | ---------------------------------------------- |
+| `omarchy sync --tag v2.3.0` | Commit + tag + push in one command             |
+| `omarchy branch -d <name>`  | Safe branch deletion (checks merged, confirms) |
+| `omarchy branch -D <name>`  | Force delete unmerged branches                 |
 
 ### 📦 Install
 

@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"fmt"
+	"omarchy/pkg/database"
 	"os"
 	"os/exec"
 	"strings"
@@ -273,6 +274,23 @@ deployInstructions:
 	}
 
 	return nil
+}
+func PreviewReset(dbType database.DatabaseType) {
+	fmt.Println("🔍 DRY RUN: Tables that will be dropped:")
+
+	tables, err := database.GetTableNames(dbType) // You'll need to implement this
+	if err != nil {
+		fmt.Printf("  ⚠️ Could not list tables: %v\n", err)
+		return
+	}
+	for _, table := range tables {
+		rowCount := database.GetTableRowCount(dbType, table)
+		fmt.Printf("  - %s (%d rows)\n", table, rowCount)
+	}
+
+	if len(tables) == 0 {
+		fmt.Println("  (no tables found)")
+	}
 }
 
 func runCmd(name string, args ...string) {

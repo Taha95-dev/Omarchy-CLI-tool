@@ -26,9 +26,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-var Version = "v2.2.0"
+var Version = getVersion()
 
 func main() {
 	config := config.LoadConfig()
@@ -194,6 +196,86 @@ func main() {
 	}
 	fmt.Printf("✅ Created %s project: %s\n", *projectType, *projectName)
 }
+func getVersion() string {
+	// Try git first
+	if _, err := os.Stat(".git"); err == nil {
+		cmd := exec.Command("git", "describe", "--tags", "--abbrev=0")
+		output, err := cmd.Output()
+		if err == nil {
+			return strings.TrimSpace(string(output))
+		}
+	}
+	// Fallback to hardcoded (update manually for releases)
+	return "v2.3.0"
+}
+func validateConfig(configPath string) {
+	fmt.Printf("🔍 Validating config: %s\n", configPath)
+
+	// Check if file exists
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Printf("❌ Config file does not exist\n")
+		fmt.Printf("   Run 'omarchy config --edit' to create one\n")
+		return
+	}
+
+	// Read and parse YAML
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		fmt.Printf("❌ Cannot read config file: %v\n", err)
+		return
+	}
+
+	// Try to parse as YAML
+	var cfg map[string]interface{}
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		fmt.Printf("❌ Invalid YAML: %v\n", err)
+		fmt.Printf("\n🔧 Common issues:\n")
+		fmt.Printf("   - Missing spaces after colons\n")
+		fmt.Printf("   - Using tabs instead of spaces\n")
+		fmt.Printf("   - Unclosed quotes\n")
+		return
+	}
+
+	// Validate known fields
+	fmt.Printf("✅ YAML syntax is valid\n\n")
+
+	// Check default_type
+	if defaultType, ok := cfg["default_type"]; ok {
+		validTypes := []string{"web", "cli", "fullstack", "backend"}
+		if !contains(validTypes, defaultType.(string)) {
+			fmt.Printf("⚠️  Warning: default_type '%s' is not standard\n", defaultType)
+			fmt.Printf("   Supported: web, cli, fullstack, backend\n")
+		} else {
+			fmt.Printf("✅ default_type: %s\n", defaultType)
+		}
+	} else {
+		fmt.Printf("ℹ️  default_type not set (will use 'cli')\n")
+	}
+
+	// Check type_backend
+	if backendType, ok := cfg["type_backend"]; ok {
+		validBackends := []string{"go", "node", "python", "cpp"}
+		if !contains(validBackends, backendType.(string)) {
+			fmt.Printf("⚠️  Warning: type_backend '%s' is not supported\n", backendType)
+			fmt.Printf("   Supported: go, node, python, cpp\n")
+		} else {
+			fmt.Printf("✅ type_backend: %s\n", backendType)
+		}
+	} else {
+		fmt.Printf("ℹ️  type_backend not set (will use 'node')\n")
+	}
+
+	fmt.Printf("\n💡 Config is usable. Run 'omarchy doctor' for full environment check.\n")
+}
+
+func contains(slice []string, val string) bool {
+	for _, item := range slice {
+		if item == val {
+			return true
+		}
+	}
+	return false
+}
 func handleConfigCommand() {
 	if len(os.Args) < 3 {
 		fmt.Println("❌ Missing subcommand")
@@ -243,10 +325,11 @@ func handleConfigCommand() {
 			return
 		}
 		fmt.Println(string(data))
-
+	case "--validate", "-v":
+		validateConfig(configPath)
 	default:
 		fmt.Printf("❌ Unknown config subcommand: %s\n", os.Args[2])
-		fmt.Println("Available: --edit, --path, --list")
+		fmt.Println("Available: --edit, --path, --list, --validate")
 	}
 }
 func HandleDeployCommand() {
@@ -424,19 +507,22 @@ func handleDiskUsageCommand() {
 }
 func handleDBCommand() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: omarchy db <init|migrate|seed|reset|status> [--dry-run]")
+		fmt.Println("Usage: omarchy db <init|migrate|seed|reset|status> [--dry-run] [--force]")
 		return
 	}
 
 	subCmd := os.Args[2]
 	dbType := database.DetectDatabase()
 
-	// Check for --dry-run flag
+	// Check for flags
 	dryRun := false
+	force := false
 	for i := 3; i < len(os.Args); i++ {
-		if os.Args[i] == "--dry-run" {
+		switch os.Args[i] {
+		case "--dry-run":
 			dryRun = true
-			break
+		case "--force":
+			force = true
 		}
 	}
 
@@ -451,8 +537,23 @@ func handleDBCommand() {
 		}
 		if err := database.InitDatabase(dbType, projectName); err != nil {
 			fmt.Printf("❌ Failed to init database: %v\n", err)
+		} else {
+			fmt.Println("✅ Database initialized successfully.")
 		}
+
 	case "migrate":
+		// Safety: require --force for production
+		if !dryRun && !force && isProductionDB(dbType) {
+			fmt.Println("⚠⚠⚠ PRODUCTION DATABASE DETECTED ⚠⚠⚠")
+			fmt.Printf("You are about to run migrations on: %s\n", getDBURL(dbType))
+			fmt.Println("This could change your schema and potentially delete data.")
+			fmt.Println("\nFirst, run dry-run to see what will change:")
+			fmt.Println("  omarchy db migrate --dry-run")
+			fmt.Println("\nIf you're sure, run with --force:")
+			fmt.Println("  omarchy db migrate --force")
+			return
+		}
+
 		if dryRun {
 			database.RunMigration(dbType, true)
 		} else {
@@ -460,24 +561,81 @@ func handleDBCommand() {
 				fmt.Printf("❌ Migration failed: %v\n", err)
 			}
 		}
+
+	case "reset":
+		// AUTO DRY-RUN FIRST (unless --force bypasses everything)
+		if !force {
+			fmt.Println("⚠ DATABASE RESET DETECTED")
+			fmt.Println("Running dry-run preview first...")
+			fmt.Println()
+
+			// Auto dry-run (show what will be deleted)
+			database.PreviewReset(dbType) // You'll need this function
+
+			fmt.Println()
+			fmt.Println("⚠⚠⚠ WARNING ⚠⚠⚠")
+			fmt.Printf("You are about to DELETE ALL DATA in: %s\n", getDBURL(dbType))
+			fmt.Println("This action CANNOT be undone.")
+			fmt.Println()
+			fmt.Print("Type 'DELETE' to confirm, 'dry-run' to preview again, or anything else to cancel: ")
+
+			var confirm string
+			fmt.Scanln(&confirm)
+
+			if confirm == "dry-run" {
+				// Run preview again and re-prompt
+				database.PreviewReset(dbType)
+				fmt.Print("Type 'DELETE' to confirm: ")
+				fmt.Scanln(&confirm)
+			}
+
+			if confirm != "DELETE" {
+				fmt.Println("Reset cancelled.")
+				return
+			}
+
+			// Final warning
+			fmt.Println()
+			fmt.Print("LAST CHANCE: Type 'I UNDERSTAND' to proceed: ")
+			var finalConfirm string
+			fmt.Scanln(&finalConfirm)
+			if finalConfirm != "I UNDERSTAND" {
+				fmt.Println("Reset cancelled.")
+				return
+			}
+		}
+
+		// Actually reset
+		if err := database.ResetDatabase(dbType); err != nil {
+			fmt.Printf("❌ Reset failed: %v\n", err)
+		} else {
+			fmt.Println("✅ Database reset successfully.")
+			if !force {
+				fmt.Println("   Tip: Run 'omarchy db seed' to populate with test data.")
+			}
+		}
+
 	case "seed":
+		// Similar safety for seed (if it overwrites data)
+		if !dryRun && !force && isProductionDB(dbType) {
+			fmt.Println("⚠⚠⚠ PRODUCTION DATABASE DETECTED ⚠⚠⚠")
+			fmt.Print("Seeding will add/overwrite data. Type 'SEED' to continue: ")
+			var confirm string
+			fmt.Scanln(&confirm)
+			if confirm != "SEED" {
+				fmt.Println("Seed cancelled.")
+				return
+			}
+		}
+
 		if dryRun {
-			fmt.Println("🔍 DRY RUN: Would seed database")
-			database.SeedDatabase(dbType) // This will show preview
+			database.SeedDatabase(dbType) // Should show preview
 		} else {
 			if err := database.SeedDatabase(dbType); err != nil {
 				fmt.Printf("❌ Seeding failed: %v\n", err)
 			}
 		}
-	case "reset":
-		if dryRun {
-			fmt.Println("🔍 DRY RUN: Would reset database (DELETE ALL DATA)")
-			fmt.Println("   This would remove all tables and data")
-		} else {
-			if err := database.ResetDatabase(dbType); err != nil {
-				fmt.Printf("❌ Reset failed: %v\n", err)
-			}
-		}
+
 	case "status":
 		fmt.Printf("📊 Database: %s\n", dbType)
 		// Show migration status
@@ -485,6 +643,41 @@ func handleDBCommand() {
 		fmt.Printf("Unknown db command: %s\n", subCmd)
 		fmt.Println("Available: init, migrate, seed, reset, status")
 	}
+}
+
+// Helper functions you'll need to add in pkg/database/
+
+func isProductionDB(dbType database.DatabaseType) bool {
+	// Check database URL for production indicators
+	_ = dbType
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return false
+	}
+	// Look for production keywords
+	prodIndicators := []string{"prod", "production", "live", "aws", "heroku", "railway"}
+	for _, indicator := range prodIndicators {
+		if strings.Contains(strings.ToLower(url), indicator) {
+			return true
+		}
+	}
+	return false
+}
+
+func getDBURL(dbType database.DatabaseType) string {
+	_ = dbType
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return "localhost (default)"
+	}
+	// Mask sensitive info (password)
+	if strings.Contains(url, "@") {
+		parts := strings.Split(url, "@")
+		if len(parts) > 1 {
+			return parts[1] // Show only host part
+		}
+	}
+	return url
 }
 func getCurrentDir() string {
 	dir, err := os.Getwd()
@@ -1121,14 +1314,131 @@ func handleGitSync(ctx context.Context) {
 	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
 	message := syncCmd.String("m", "", "Commit message")
 	dryRun := syncCmd.Bool("dry-run", false, "Show what would happen without doing it")
-	syncCmd.Parse(os.Args[2:])
+	tag := syncCmd.String("tag", "", "Create and push tag with this name") // ← MOVED HERE
+
+	syncCmd.Parse(os.Args[2:]) // ← Parse AFTER all flags defined
 
 	if *dryRun {
 		gitsupport.DryRunSync(ctx)
 		return
 	}
 
-	gitsupport.GitSync(ctx, *autoMsg, *message)
+	// Then run the actual sync
+	gitsupport.GitSync(ctx, *autoMsg, *message, *tag)
+
+	// After successful sync, handle tag creation
+	if *tag != "" {
+		fmt.Printf("🏷️ Creating tag: %s\n", *tag)
+		support.RunCmd("git", "tag", "-a", *tag, "-m", fmt.Sprintf("Release %s", *tag))
+		support.RunCmd("git", "push", "origin", *tag)
+		fmt.Printf("✅ Tag %s created and pushed\n", *tag)
+	}
+}
+func handleBranchCommand() {
+	// Parse flags
+	var force bool
+	branchName := ""
+
+	for i := 2; i < len(os.Args); i++ {
+		switch os.Args[i] {
+		case "-d":
+			// Next arg is branch name
+			if i+1 < len(os.Args) {
+				branchName = os.Args[i+1]
+				i++
+			} else {
+				fmt.Println("❌ Missing branch name")
+				return
+			}
+		case "-D":
+			force = true
+			if i+1 < len(os.Args) {
+				branchName = os.Args[i+1]
+				i++
+			} else {
+				fmt.Println("❌ Missing branch name")
+				return
+			}
+		default:
+			// If no flag, assume -d
+			if branchName == "" {
+				branchName = os.Args[i]
+			}
+		}
+	}
+
+	if branchName == "" {
+		fmt.Println("❌ Missing branch name")
+		fmt.Println("Usage: omarchy branch -d <name>")
+		return
+	}
+
+	// Don't delete current branch
+	currentBranch := getCurrentBranch()
+	if currentBranch == branchName && !force {
+		fmt.Printf("❌ Cannot delete branch '%s' while it's checked out.\n", branchName)
+		fmt.Println("   Switch to another branch first: git checkout main")
+		return
+	}
+
+	// If not force, check if branch is merged
+	if !force {
+		merged, err := isBranchMerged(branchName)
+		if err != nil {
+			fmt.Printf("❌ Failed to check branch: %v\n", err)
+			return
+		}
+		if !merged {
+			fmt.Printf("⚠️ Branch '%s' is not fully merged.\n", branchName)
+			fmt.Print("   Use -D to force delete, or merge it first.\n")
+			return
+		}
+	}
+
+	// Confirm deletion
+	if !force {
+		fmt.Printf("Delete branch '%s'? (y/N): ", branchName)
+		var confirm string
+		fmt.Scanln(&confirm)
+		if confirm != "y" && confirm != "Y" {
+			fmt.Println("Aborted.")
+			return
+		}
+	}
+
+	// Delete the branch
+	cmd := exec.Command("git", "branch", "-d", branchName)
+	if force {
+		cmd = exec.Command("git", "branch", "-D", branchName)
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Printf("❌ Failed to delete branch: %v\n", err)
+		fmt.Printf("   %s\n", output)
+		return
+	}
+
+	fmt.Printf("✅ Deleted branch: %s\n", branchName)
+}
+
+// Helper functions
+func getCurrentBranch() string {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func isBranchMerged(branchName string) (bool, error) {
+	cmd := exec.Command("git", "branch", "--merged", branchName)
+	output, err := cmd.Output()
+	if err != nil {
+		return false, err
+	}
+	// If branch appears in merged list, it's merged
+	return strings.Contains(string(output), branchName), nil
 }
 
 // When writing files, use consistent line endings
@@ -1267,7 +1577,9 @@ Git:
   omarchy sync                      Commit with default message
   omarchy sync -a                   Auto-generate commit message
   omarchy sync -m "message"         Commit with custom message
-  omarchy sync --dry-run            Preview what would happen
+  omarchy sync --tag v2.3.0         Commit + tag + push
+  omarchy branch -d <name>          Delete merged branch safely
+  omarchy branch -D <name>          Force delete unmerged branch
 
   Utilities:
     omarchy doctor                               Check development environment
