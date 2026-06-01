@@ -10,20 +10,26 @@ permissions:
 
 jobs:
   build:
-    name: Build for ${{ matrix.os }}
+    name: Build for ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
           - os: windows-latest
-            output: omarchy-windows-amd64.exe
+            goos: windows
+            goarch: amd64
+            output: omarchy.exe
             asset_name: omarchy-windows-amd64.exe
           - os: ubuntu-latest
-            output: omarchy-linux-amd64
+            goos: linux
+            goarch: amd64
+            output: omarchy
             asset_name: omarchy-linux-amd64
           - os: macos-latest
-            output: omarchy-darwin-amd64
-            asset_name: omarchy-darwin-amd64
+            goos: darwin
+            goarch: arm64
+            output: omarchy
+            asset_name: omarchy-darwin-arm64
 
     steps:
       - name: Checkout code
@@ -34,31 +40,37 @@ jobs:
         with:
           go-version: "1.21"
 
-      - name: Build
-        run: go build -o ${{ matrix.output }} -ldflags="-X main.Version=${{ github.ref_name }}"
+      # Explicitly setting GOOS and GOARCH keeps the matrix output accurate
+      - name: Build Binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -o ${{ matrix.asset_name }} -ldflags="-s -w -X main.Version=${{ github.ref_name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.asset_name }}
-          path: ${{ matrix.output }}
+          path: ${{ matrix.asset_name }}
 
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     permissions:
-      contents: write # ← Also add here
+      contents: write
     steps:
+      # Fix: Pulls everything down into a single flat directory
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          merge-multiple: true
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: artifacts/* # Flattened search paths
           draft: false
           prerelease: false
           generate_release_notes: true

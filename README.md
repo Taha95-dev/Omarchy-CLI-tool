@@ -33,9 +33,11 @@ cd Omarchy-CLI-tool
 go build -o omarchy
 
 # Run anywhere
+
 ./omarchy run dev
 ./omarchy info
 ./omarchy cleanup --docker
+
 ```
 
 Or [download the latest release](https://github.com/Taha95-dev/Omarchy-CLI-tool/releases).
