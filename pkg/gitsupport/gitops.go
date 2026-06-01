@@ -95,25 +95,32 @@ func GitSync(ctx context.Context, autoMsg bool, customMsg, tag string) {
 	}
 	// After push, handle tag
 	if tag != "" {
-		fmt.Printf("🏷️ Creating tag: %s\n", tag)
+		fmt.Printf("🏷️ Checking tag availability: %s\n", tag)
 
-		// Check if tag exists
+		// Check if tag exists locally or remotely
 		if err := exec.Command("git", "rev-parse", tag).Run(); err == nil {
-			fmt.Printf("⚠️ Tag %s already exists. Skipping.\n", tag)
+			fmt.Printf("⚠️ Tag %s already exists. Skipping tag creation.\n", tag)
 			return
 		}
 
-		// Create tag
+		// Create tag using your secure project utility wrapper
 		tagMsg := fmt.Sprintf("Release %s", tag)
 		if customMsg != "" {
 			tagMsg = customMsg
 		}
-		exec.Command("git", "tag", "-a", tag, "-m", tagMsg).Run()
-		fmt.Printf("✅ Created tag: %s\n", tag)
 
-		// Push tag
-		exec.Command("git", "push", "origin", tag).Run()
-		fmt.Printf("✅ Pushed tag %s to origin\n", tag)
+		fmt.Printf("📦 Stamping repository with tag %s...\n", tag)
+		support.RunCmd("git", "tag", "-a", tag, "-m", tagMsg)
+		fmt.Printf("✅ Created local tag: %s\n", tag)
+
+		// Push tag securely if a remote exists
+		if hasRemote() {
+			fmt.Printf("🚀 Uploading tag %s to origin remote tracking branch...\n", tag)
+			support.RunCmd("git", "push", "origin", tag)
+			fmt.Printf("✅ Pushed tag %s to origin\n", tag)
+		} else {
+			support.PrintWarning("Skipping tag push: No remote configuration origin detected.")
+		}
 	}
 }
 

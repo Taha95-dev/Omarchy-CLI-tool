@@ -17,6 +17,8 @@ import (
 	"omarchy/pkg/doctor"
 	"omarchy/pkg/find"
 	"omarchy/pkg/gitsupport"
+	"omarchy/pkg/info"
+	"omarchy/pkg/runscripts"
 	"omarchy/pkg/support"
 	"omarchy/pkg/templates"
 	"omarchy/pkg/tree"
@@ -69,6 +71,46 @@ func main() {
 		case "tree":
 			handleTreeCommand(ctx)
 			return
+
+		// Fast Quality-of-Life shortcut: 'omarchy dev' auto-runs current project ecosystem
+		case "dev":
+			projectType := runscripts.DetectProjectType()
+			if projectType != "unknown" {
+				if err := runscripts.RunScript(projectType, "dev"); err != nil {
+					fmt.Printf("❌ %v\n", err)
+				}
+			}
+			return
+
+		// Upgraded build to fall back to project detection if no custom Go build name is given
+		case "build":
+			buildName := ""
+			if len(os.Args) > 2 {
+				buildName = os.Args[2]
+			}
+
+			// If they provided a name, assume it's a manual Go target
+			if buildName != "" {
+				if err := RunGoBuild(buildName); err != nil {
+					fmt.Printf("❌ Build failed: %v\n", err)
+				}
+				return
+			}
+
+			// Otherwise, check if it's a C++, Node, or C# project building
+			projectType := runscripts.DetectProjectType()
+			if projectType != "unknown" && projectType != "go" {
+				if err := runscripts.RunScript(projectType, "build"); err != nil {
+					fmt.Printf("❌ %v\n", err)
+				}
+			} else {
+				// Default fallback to standard go build logic
+				if err := RunGoBuild(""); err != nil {
+					fmt.Printf("❌ Build failed: %v\n", err)
+				}
+			}
+			return
+
 		case "save":
 			if len(os.Args) < 3 {
 				fmt.Println("Usage: omarchy save <template-name>")
@@ -85,7 +127,6 @@ func main() {
 		case "delete-template", "rm-template":
 			if len(os.Args) < 3 {
 				fmt.Println("Usage: omarchy delete-template <template-name>")
-				fmt.Println("   or: omarchy rm-template <template-name>")
 				return
 			}
 			templateName := os.Args[2]
@@ -94,15 +135,6 @@ func main() {
 		case "list-templates", "ls-templates":
 			templates.ListTemplates()
 			return
-		case "build":
-			buildName := ""
-			if len(os.Args) > 2 {
-				buildName = os.Args[2]
-			}
-			if err := RunGoBuild(buildName); err != nil {
-				fmt.Printf("❌ Build failed: %v\n", err)
-			}
-			return
 		case "help", "--help", "-h":
 			showHelp()
 			return
@@ -110,7 +142,7 @@ func main() {
 			handleTreeBuildCommand()
 			return
 		case "version", "--version":
-			fmt.Println("Omarchy" + Version)
+			fmt.Printf("Omarchy %s\n", Version) // Fixed formatting string layout
 			return
 		case "fix-git-home":
 			gitsupport.HandleFixGitInHome()
@@ -134,6 +166,9 @@ func main() {
 		case "backup":
 			handleBackupCommand()
 			return
+		case "info":
+			info.ShowInfo()
+			return
 		case "cleanup", "c-up":
 			handleCleanupCommand()
 			return
@@ -147,6 +182,24 @@ func main() {
 			}
 			handleConfigCommand()
 			return
+		case "run":
+			if len(os.Args) < 3 {
+				projectType := runscripts.DetectProjectType()
+				if projectType != "unknown" {
+					runscripts.ListScripts(projectType)
+				}
+				return
+			}
+
+			scriptName := os.Args[2]
+			projectType := runscripts.DetectProjectType()
+			if projectType == "unknown" {
+				return
+			}
+
+			if err := runscripts.RunScript(projectType, scriptName); err != nil {
+				fmt.Printf("❌ %v\n", err)
+			}
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
 			fmt.Println("Run 'omarchy help' for available commands")
@@ -171,6 +224,7 @@ func main() {
 	withNext := flag.Bool("next", false, "Add Next.js frontend")
 	withPython := flag.Bool("python", false, "Add Python backend")
 	withCpp := flag.Bool("cpp", false, "Add C++ backend")
+
 	flag.Parse()
 
 	// Create project root
@@ -206,7 +260,22 @@ func getVersion() string {
 		}
 	}
 	// Fallback to hardcoded (update manually for releases)
-	return "v2.3.0"
+	return "v2.4.0"
+}
+func DockerCleanup(dryRun bool) error {
+	if dryRun {
+		fmt.Println("🔍 Docker cleanup dry run:")
+		cmd := exec.Command("docker", "system", "prune", "--dry-run")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	fmt.Println("🧹 Cleaning up Docker...")
+	cmd := exec.Command("docker", "system", "prune", "-f")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 func validateConfig(configPath string) {
 	fmt.Printf("🔍 Validating config: %s\n", configPath)
@@ -397,6 +466,7 @@ func handleFindCommand() {
 func handleCleanupCommand() {
 	cleanupCmd := flag.NewFlagSet("cleanup", flag.ExitOnError)
 	dryRun := cleanupCmd.Bool("dry-run", false, "Preview what would be deleted")
+	docker := cleanupCmd.Bool("docker", false, "Clean up Docker (dangling images, stopped containers, unused volumes)")
 	all := cleanupCmd.Bool("all", false, "Deep clean (node_modules, .cache, etc.)")
 	cleanupCmd.Parse(os.Args[2:])
 
@@ -421,7 +491,12 @@ func handleCleanupCommand() {
 	} else {
 		fmt.Println("🧹 Cleaning up...")
 	}
-
+	if *docker {
+		if err := DockerCleanup(*dryRun); err != nil {
+			fmt.Printf("❌ Docker cleanup failed: %v\n", err)
+		}
+		return
+	}
 	deleted, totalSize, err := cleanup.RunCleanup(path, opts)
 	if err != nil {
 		fmt.Printf("❌ Cleanup failed: %v\n", err)
@@ -1314,25 +1389,17 @@ func handleGitSync(ctx context.Context) {
 	autoMsg := syncCmd.Bool("a", false, "Auto-generate commit message")
 	message := syncCmd.String("m", "", "Commit message")
 	dryRun := syncCmd.Bool("dry-run", false, "Show what would happen without doing it")
-	tag := syncCmd.String("tag", "", "Create and push tag with this name") // ← MOVED HERE
+	tag := syncCmd.String("tag", "", "Create and push tag with this name")
 
-	syncCmd.Parse(os.Args[2:]) // ← Parse AFTER all flags defined
+	syncCmd.Parse(os.Args[2:]) // Parse AFTER all flags defined
 
 	if *dryRun {
 		gitsupport.DryRunSync(ctx)
 		return
 	}
 
-	// Then run the actual sync
+	// Run the actual sync — this now completely handles your commit, push, AND tagging safely!
 	gitsupport.GitSync(ctx, *autoMsg, *message, *tag)
-
-	// After successful sync, handle tag creation
-	if *tag != "" {
-		fmt.Printf("🏷️ Creating tag: %s\n", *tag)
-		support.RunCmd("git", "tag", "-a", *tag, "-m", fmt.Sprintf("Release %s", *tag))
-		support.RunCmd("git", "push", "origin", *tag)
-		fmt.Printf("✅ Tag %s created and pushed\n", *tag)
-	}
 }
 func handleBranchCommand() {
 	// Parse flags
@@ -1507,12 +1574,18 @@ func RunGoBuild(name string) error {
 
 	// If no name provided (empty), try to get from go.mod
 	if outputName == "" {
-		// Read go.mod to get module name
 		data, err := os.ReadFile("go.mod")
 		if err == nil {
 			lines := strings.Split(string(data), "\n")
-			if len(lines) > 0 && strings.HasPrefix(lines[0], "module ") {
-				outputName = strings.TrimSpace(strings.TrimPrefix(lines[0], "module "))
+			if len(lines) > 0 {
+				// Trim spaces AND hidden carriage returns (\r) across all systems
+				firstLine := strings.TrimSpace(lines[0])
+				if strings.HasPrefix(firstLine, "module ") {
+					fullModulePath := strings.TrimSpace(strings.TrimPrefix(firstLine, "module "))
+
+					// Fix: Extract just the last part (e.g., "github.com/user/omarchy" -> "omarchy")
+					outputName = filepath.Base(fullModulePath)
+				}
 			}
 		}
 	}
@@ -1521,7 +1594,12 @@ func RunGoBuild(name string) error {
 		outputName = "app"
 	}
 
-	// Build the binary
+	// Append .exe extension automatically on Windows for clean local running targets
+	if runtime.GOOS == "windows" && !strings.HasSuffix(outputName, ".exe") {
+		outputName += ".exe"
+	}
+
+	// Build the binary locally
 	buildCmd := exec.Command("go", "build", "-o", outputName)
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
@@ -1534,13 +1612,13 @@ func RunGoBuild(name string) error {
 
 	fmt.Printf("✅ Built binary: %s\n", outputName)
 
-	// Install to GOPATH/bin
-	installCmd := exec.Command("go", "install")
+	// Clean Install approach: Tell Go to install the *current folder directory* explicitly
+	installCmd := exec.Command("go", "install", ".")
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr
 
 	if err := installCmd.Run(); err != nil {
-		support.PrintWarning("Install failed, but binary was built")
+		support.PrintWarning("Install failed, but binary was built locally")
 		fmt.Printf("You can still run: ./%s\n", outputName)
 		return nil
 	}
