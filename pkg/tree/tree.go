@@ -125,11 +125,20 @@ func CalculateDepth(line string) int {
 }
 
 func ExtractName(line string) string {
-	// Remove prefix symbols
-	patterns := []string{"├── ", "└── ", "│   ", "    "}
 	result := line
-	for _, p := range patterns {
-		result = strings.ReplaceAll(result, p, "")
+
+	// Clean characters step-by-step from the left side only
+	for {
+		oldLen := len(result)
+		result = strings.TrimPrefix(result, "│   ")
+		result = strings.TrimPrefix(result, "    ")
+		result = strings.TrimPrefix(result, "├── ")
+		result = strings.TrimPrefix(result, "└── ")
+
+		// If the string length stopped changing, we stripped the whole prefix!
+		if len(result) == oldLen {
+			break
+		}
 	}
 	return strings.TrimSpace(result)
 }

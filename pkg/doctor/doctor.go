@@ -6,6 +6,7 @@ import (
 	"omarchy/pkg/gitsupport"
 	"omarchy/pkg/support"
 	"os"
+	"sync"
 )
 
 func RunDoctor(ctx context.Context) {
@@ -18,61 +19,91 @@ func RunDoctor(ctx context.Context) {
 
 	fmt.Printf("🖥️ Operating System: %s\n", support.GetOS())
 	fmt.Printf("🏠 Home Directory: %s\n", support.GetHomeDir())
-	fmt.Printf("🔍 Omarchy Environment Check\n")
+	fmt.Printf("🔍 Omarchy Environment Check (Thread-Safe Concurrency)\n\n")
 
-	// Tool checks
-	support.CheckTool("node", "--version")
-	support.CheckTool("go", "version")
-	support.CheckTool("git", "--version")
-	support.CheckTool("npm", "--version")
-	support.CheckTool("docker", "--version")
+	var wg sync.WaitGroup
+	var mu sync.Mutex // 👈 This locks down os.Stdout so strings don't smash together
 
-	// Config check
-	configPath := support.GetConfigPath()
-	if _, err := os.Stat(configPath); err == nil {
-		fmt.Printf("✅ Omarchy config found at: %s\n", configPath)
-	} else {
-		fmt.Printf("⚠️ Omarchy config not found (run: omarchy config init)\n")
-	}
+	// Group 1: CLI External Tools Validation
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// Git config check
-	fmt.Printf("📋 Git Configuration:\n")
-	gitsupport.CheckGitConfig()
+		// Do your tool checks, but wrap them in a lock so they print sequentially
+		mu.Lock()
+		support.CheckTool("node", "--version")
+		support.CheckTool("go", "version")
+		support.CheckTool("git", "--version")
+		support.CheckTool("npm", "--version")
+		support.CheckTool("docker", "--version")
+		mu.Unlock()
+	}()
 
-	// === NEW SAFETY CHECKS ===
+	// Group 2: Configuration & Git Core Status
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// 1. Git in home directory
-	fmt.Printf("🏠 Home Directory Safety:\n")
-	gitsupport.CheckGitInHome()
+		configPath := support.GetConfigPath()
 
-	// 2. Git in common wrong places
-	fmt.Printf("📁 Project Location Safety:\n")
-	gitsupport.CheckGitInDesktop()
-	gitsupport.CheckGitInDownloads()
-	gitsupport.CheckGitInDocuments()
+		mu.Lock()
+		if _, err := os.Stat(configPath); err == nil {
+			fmt.Printf("✅ Omarchy config found at: %s\n", configPath)
+		} else {
+			fmt.Printf("⚠️ Omarchy config not found (run: omarchy config init)\n")
+		}
+		gitsupport.CheckGitConfig()
+		mu.Unlock()
+	}()
 
-	// 3. HUGE node_modules
-	fmt.Printf("📦 Dependency Health:\n")
-	gitsupport.CheckNodeModulesSize()
+	// Group 3: File System Location Safety
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// 4. Disk space
-	fmt.Printf("💾 Disk Space:\n")
-	gitsupport.CheckDiskSpace()
+		mu.Lock()
+		gitsupport.CheckGitInHome()
+		gitsupport.CheckGitInDesktop()
+		gitsupport.CheckGitInDownloads()
+		gitsupport.CheckGitInDocuments()
+		mu.Unlock()
+	}()
 
-	// 5. Environment variables
-	fmt.Printf("🌍 Environment Variables:\n")
-	gitsupport.CheckCommonEnvVars()
+	// Group 4: Heavy I/O Tasks (Disk space and node_modules size)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// 6. Large files in git
-	fmt.Printf("📄 Git Repository Health:\n	")
-	gitsupport.CheckLargeFilesInGit()
-	gitsupport.CheckUntrackedFiles()
+		// Let the hard drive work in the background without holding the lock!
+		// This is where you save time.
+		gitsupport.CheckNodeModulesSize()
+		gitsupport.CheckDiskSpace()
+	}()
 
-	// 7. VS Code extensions
-	fmt.Printf("🧩 VS Code Extensions:\n")
-	gitsupport.CheckVSCodeExtensions()
+	// Group 5: Repository Health and Environment Data
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-	// 8. Omarchy version
-	fmt.Printf("🚀 Omarchy Health:\n")
-	gitsupport.CheckOmarchyVersion()
+		mu.Lock()
+		gitsupport.CheckCommonEnvVars()
+		gitsupport.CheckLargeFilesInGit()
+		gitsupport.CheckUntrackedFiles()
+		mu.Unlock()
+	}()
+
+	// Group 6: IDE Sync & Framework Versions
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		mu.Lock()
+		gitsupport.CheckVSCodeExtensions()
+		gitsupport.CheckOmarchyVersion()
+		mu.Unlock()
+	}()
+
+	wg.Wait()
+
+	fmt.Println("\n✨ All diagnostic health checks complete without text racing!")
 }

@@ -1,4 +1,4 @@
-# 🚀 Omarchy ━━━━ "Pizza Prep Update"
+# 🚀 Omarchy ━━━━ "Performance Update"
 
 **One CLI to rule your dev workflow — git, scripts, env, cleanup, and more.**
 
@@ -10,17 +10,14 @@
 
 ## ✨ Features
 
-| Command                    | What it does                                                         |
-| -------------------------- | -------------------------------------------------------------------- |
-| `omarchy run`              | Smart script runner — detect project type, run dev/build/test        |
-| `omarchy info`             | Instant project stats: files, lines of code, TODOs, git info         |
-| `omarchy sync`             | Git add/commit/push with safety checks and tags                      |
-| `omarchy cleanup --docker` | Free disk space — remove dangling Docker images, containers, volumes |
-| `omarchy doctor`           | Diagnose your dev environment                                        |
-| `omarchy tree`             | Visualize directory structure                                        |
-| `omarchy db`               | Database migrations, seeding, reset (with production safeguards)     |
-
-Plus: `backup`, `find`, `du`, `deploy`, `count`, `template` management, and more.
+| Commands           | What Changed                                             |
+| ------------------ | -------------------------------------------------------- |
+| `omarchy doctor`   | Concurrent diagnostic suite for environment health.      |
+| `omarchy clean-up` | Aggressive recursive purge for build artifacts and logs. |
+| `omarchy run`      | Smart script runner (dev/build/test automation).         |
+| `omarhcy sync`     | Secure Git orchestration with safety validation.         |
+| `omarchy info`     | Instant project analytics (LOC, TODOs, Git health).      |
+| `omarchy db`       | Database migrations and lifecycle management.            |
 
 ---
 

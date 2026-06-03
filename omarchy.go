@@ -32,6 +32,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// The line that made it 5,000! 🚀
 var Version = getVersion()
 
 func main() {
@@ -200,6 +201,7 @@ func main() {
 			if err := runscripts.RunScript(projectType, scriptName); err != nil {
 				fmt.Printf("❌ %v\n", err)
 			}
+			return
 		default:
 			fmt.Printf("❌ Unknown command: %s\n", os.Args[1])
 			fmt.Println("Run 'omarchy help' for available commands")
@@ -1570,6 +1572,12 @@ func handleTreeCommand(ctx context.Context) {
 	tree.Print(ctx, root, depth)
 }
 func RunGoBuild(name string) error {
+	// 🛑 GUARD: Check if go.mod exists before doing anything else
+	if _, err := os.Stat("go.mod"); os.IsNotExist(err) {
+		support.PrintError("Not a Go project! Missing go.mod in this directory.")
+		return fmt.Errorf("missing go.mod")
+	}
+
 	outputName := name
 
 	// If no name provided (empty), try to get from go.mod
@@ -1613,7 +1621,7 @@ func RunGoBuild(name string) error {
 	fmt.Printf("✅ Built binary: %s\n", outputName)
 
 	// Clean Install approach: Tell Go to install the *current folder directory* explicitly
-	installCmd := exec.Command("go", "install", ".")
+	installCmd := exec.Command("go", "install")
 	installCmd.Stdout = os.Stdout
 	installCmd.Stderr = os.Stderr
 
@@ -1627,6 +1635,17 @@ func RunGoBuild(name string) error {
 	return nil
 }
 func showHelp() {
+	banner := `
+  ____                               _           
+ / __ \                             | |          
+| |  | |_ __ ___   __ _ _ __ ___  __| | ___ _   _ 
+| |  | | '_ ' _ \ / _' | '__/ __|/ _' |/ __| | | |
+| |__| | | | | | | (_| | | | (__| (_| | (__| |_| |
+ \____/|_| |_| |_|\__,_|_|  \___|\__,_|\___|\__, |
+                                             __/ |
+                                            |___/ 
+`
+	fmt.Println(banner)
 	fmt.Printf(`🚀 Omarchy - Project Scaffolding CLI Tool
 
 USAGE:

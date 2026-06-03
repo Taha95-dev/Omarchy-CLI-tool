@@ -116,7 +116,6 @@ func CreateBackup(opts BackupOptions) error {
 	defer zipWriter.Close()
 
 	progress := &progressCounter{total: totalSize}
-	var processed int64
 
 	err = filepath.Walk(absSource, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -153,8 +152,7 @@ func CreateBackup(opts BackupOptions) error {
 		if err != nil {
 			return nil
 		}
-		processed += written
-		progress.update(processed)
+		progress.update(written)
 
 		return nil
 	})
