@@ -33,6 +33,7 @@ import (
 )
 
 // The line that made it 5,000! 🚀
+// release v2.5.0
 var Version = getVersion()
 
 func main() {
