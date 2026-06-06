@@ -1,5 +1,4 @@
-# 🚀 Omarchy ━━━━ "Performance Update"
-
+# 🚀 Omarchy ━━━━ "One Final Fix Update"
 **One CLI to rule your dev workflow — git, scripts, env, cleanup, and more.**
 
 [![Go Version](https://img.shields.io/badge/go-1.21%2B-blue)](https://go.dev/)
@@ -9,17 +8,19 @@
 ---
 
 ## ✨ Features
-
-| Commands           | What Changed                                             |
-| ------------------ | -------------------------------------------------------- |
-| `omarchy doctor`   | Concurrent diagnostic suite for environment health.      |
-| `omarchy clean-up` | Aggressive recursive purge for build artifacts and logs. |
-| `omarchy run`      | Smart script runner (dev/build/test automation).         |
-| `omarhcy sync`     | Secure Git orchestration with safety validation.         |
-| `omarchy info`     | Instant project analytics (LOC, TODOs, Git health).      |
-| `omarchy db`       | Database migrations and lifecycle management.            |
+| Command | What It Does |
+|---------|--------------|
+| `omarchy doctor` | Concurrent diagnostic suite for environment health |
+| `omarchy cleanup` | Aggressive recursive purge for build artifacts and logs |
+| `omarchy run` | Smart script runner (dev/build/test automation) |
+| `omarchy sync` | Secure Git orchestration with safety validation |
+| `omarchy info` | Instant project analytics (LOC, TODOs, Git health) |
+| `omarchy db` | Database migrations and lifecycle management |
+| `omarchy use` | Create new project from saved template |
+| `omarchy save` | Save current project as a template |
 
 ---
+
 
 ## 🚀 Quick Start
 
@@ -43,18 +44,17 @@ Or [download the latest release](https://github.com/Taha95-dev/Omarchy-CLI-tool/
 
 ## 📖 Examples
 
-### Run scripts without thinking
+### Templates
 
 ```bash
-$ omarchy run
-Available scripts:
-  dev    → npm run dev
-  build  → npm run build
-  test   → npm test
+# Save current project as a template
+omarchy save my-starter
 
-$ omarchy run dev
-🚀 Running: npm run dev
-Server started on port 3000
+# List saved templates
+omarchy list-templates
+
+# Create new project from template
+omarchy use my-starter new-project
 ```
 
 ### Get instant project insights
