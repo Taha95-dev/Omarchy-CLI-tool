@@ -137,6 +137,19 @@ func main() {
 		case "list-templates", "ls-templates":
 			templates.ListTemplates()
 			return
+		case "from-template", "use":
+    			if len(os.Args) < 4 {
+        			fmt.Println("Usage: omarchy from-template <template-name> <new-project-name>")
+	 			return
+			}
+    		templateName := os.Args[2]
+    		projectName := os.Args[3]
+    		err := templates.CreateFromTemplate(templateName, projectName)
+    			if err != nil {
+        			fmt.Printf("❌ Failed to create project: %v\n", err)
+	    			return
+			}
+    		fmt.Printf("✅ Created project '%s' from template '%s'\n", projectName, templateName)
 		case "help", "--help", "-h":
 			showHelp()
 			return
@@ -263,7 +276,7 @@ func getVersion() string {
 		}
 	}
 	// Fallback to hardcoded (update manually for releases)
-	return "v2.4.0"
+	return "v2.6.0"
 }
 func DockerCleanup(dryRun bool) error {
 	if dryRun {
@@ -1698,6 +1711,11 @@ Git:
   --case             Case sensitive
   -v                 Verbose output
 
+Templates:
+  omarchy save <template-name>                  Save current project as template
+  omarchy list-templates                        List all saved templates
+  omarchy delete-template <name>                Delete a saved template
+  omarchy use <template-name> <new-name>        Create new project from template
   Help:
     omarchy help, omarchy --help                 Show this help message
 

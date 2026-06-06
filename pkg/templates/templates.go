@@ -125,3 +125,48 @@ func ListTemplates() {
 		}
 	}
 }
+func CreateFromTemplate(templateName, projectName string) error {
+    homeDir, _ := os.UserHomeDir()
+    templatePath := filepath.Join(homeDir, ".omarchy", "templates", templateName)
+
+    // Check if template exists
+    if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+        return fmt.Errorf("template '%s' not found", templateName)
+    }
+
+    // Create project directory in current location
+    projectPath := filepath.Join(".", projectName)
+    if _, err := os.Stat(projectPath); err == nil {
+        return fmt.Errorf("directory '%s' already exists", projectName)
+    }
+
+    // Copy template to new project
+    err := filepath.WalkDir(templatePath, func(path string, d os.DirEntry, err error) error {
+        if err != nil {
+            return err
+        }
+        relPath, _ := filepath.Rel(templatePath, path)
+        destPath := filepath.Join(projectPath, relPath)
+
+        if d.IsDir() {
+            os.MkdirAll(destPath, 0755)
+        } else {
+            data, err := os.ReadFile(path)
+            if err != nil {
+                return err
+            }
+            os.WriteFile(destPath, data, 0644)
+        }
+        return nil
+    })
+
+    if err != nil {
+        return fmt.Errorf("failed to copy template: %w", err)
+    }
+
+    // Remove metadata.yaml from copied project (optional)
+    metadataPath := filepath.Join(projectPath, "metadata.yaml")
+    os.Remove(metadataPath)
+
+    return nil
+}
