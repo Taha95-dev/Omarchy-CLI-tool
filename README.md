@@ -134,3 +134,23 @@ Windows Defender may flag `pathfix.exe` as a virus. This is a **false positive**
 
 [Verify the file checksum](link-to-your-checksums) to confirm integrity.
 
+## 💰 Commercial Tools
+
+### Pathfix v2 – Never Fight Your PATH Again
+
+One command to fix PATH issues forever. Works on Windows, macOS, Linux.
+
+**Features:**
+- Add directories to PATH permanently
+- Check if commands are accessible
+- Diagnose PATH problems with `doctor`
+- Sync PATH across bash, zsh, fish, PowerShell
+- Backup and restore configurations
+
+**Price: $15 (lifetime updates for v2.x)**
+
+👉 [Buy Pathfix v2](https://kashiflyas.gumroad.com/l/kkszxi)
+
+---
+
+*Omarchy v1 remains free and open source (MIT).*
