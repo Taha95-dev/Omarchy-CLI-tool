@@ -153,4 +153,4 @@ One command to fix PATH issues forever. Works on Windows, macOS, Linux.
 
 ---
 
-*Omarchy v1 remains free and open source (MIT).*
+### Omarchy v1 remains free and open source (MIT).
