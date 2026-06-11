@@ -90,7 +90,7 @@ omarchy sync --tag v1.0  # commit + tag + push
 
 ## 🤝 Support
 
-**Omarchy is built by a 13‑year‑old developer** — if you find it useful, consider giving it a ⭐ on Github.
+**Omarchy is made on a laptop with 4GB RAM,I5 3330U,HDD** — if you find it useful, consider giving it a ⭐ on Github.
 
 ---
 
