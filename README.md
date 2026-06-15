@@ -153,4 +153,25 @@ One command to fix PATH issues forever. Works on Windows, macOS, Linux.
 
 ---
 
+### Omarchy v2 (the paid one)
+
+if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 50$ along with quality of features
+
+**Features:**
+
+- Add/Remove a shortcut with 
+```bash
+omarchy tap add sync "omarchy sync $1"
+
+omarchy tap remove sync
+```
+
+**Note:**
+
+in 'omarchy tap add sync "omarchy sync $1"' the '$1' is an argument
+
+---
+
+👉 [Buy Omarchy V2](https://buy.polar.sh/polar_cl_zvnuIMcqUEG0ghrgaFfFV9PivHvnI9esOA40D25wvUK)
+
 ### Omarchy v1 remains free and open source (MIT).
