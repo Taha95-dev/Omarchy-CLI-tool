@@ -1,3 +1,45 @@
+## 💰 Commercial Tools
+
+### Pathfix v2 – Never Fight Your PATH Again
+
+One command to fix PATH issues forever. Works on Windows, macOS, Linux.
+
+**Features:**
+- Add directories to PATH permanently
+- Check if commands are accessible
+- Diagnose PATH problems with `doctor`
+- Sync PATH across bash, zsh, fish, PowerShell
+- Backup and restore configurations
+
+**Price: $15 (lifetime updates for v2.x)**
+
+👉 [Buy Pathfix v2](https://kashiflyas.gumroad.com/l/kkszxi)
+
+---
+
+### Omarchy v2 (the paid one)
+
+if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 50$ along with quality of features
+
+**Features:**
+
+- Add/Remove a shortcut with 
+```bash
+omarchy tap add sync "omarchy sync $1"
+
+omarchy tap remove sync
+```
+
+**Note:**
+
+in 'omarchy tap add sync "omarchy sync $1"' the '$1' is an argument
+
+---
+
+👉 [Buy Omarchy V2](https://buy.polar.sh/polar_cl_zvnuIMcqUEG0ghrgaFfFV9PivHvnI9esOA40D25wvUK)
+
+
+
 # 🚀 Omarchy ━━━━ "One Final Fix Update"
 **One CLI to rule your dev workflow — git, scripts, env, cleanup, and more.**
 
@@ -133,45 +175,5 @@ Windows Defender may flag `pathfix.exe` as a virus. This is a **false positive**
 5. Run the file again
 
 [Verify the file checksum](link-to-your-checksums) to confirm integrity.
-
-## 💰 Commercial Tools
-
-### Pathfix v2 – Never Fight Your PATH Again
-
-One command to fix PATH issues forever. Works on Windows, macOS, Linux.
-
-**Features:**
-- Add directories to PATH permanently
-- Check if commands are accessible
-- Diagnose PATH problems with `doctor`
-- Sync PATH across bash, zsh, fish, PowerShell
-- Backup and restore configurations
-
-**Price: $15 (lifetime updates for v2.x)**
-
-👉 [Buy Pathfix v2](https://kashiflyas.gumroad.com/l/kkszxi)
-
----
-
-### Omarchy v2 (the paid one)
-
-if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 50$ along with quality of features
-
-**Features:**
-
-- Add/Remove a shortcut with 
-```bash
-omarchy tap add sync "omarchy sync $1"
-
-omarchy tap remove sync
-```
-
-**Note:**
-
-in 'omarchy tap add sync "omarchy sync $1"' the '$1' is an argument
-
----
-
-👉 [Buy Omarchy V2](https://buy.polar.sh/polar_cl_zvnuIMcqUEG0ghrgaFfFV9PivHvnI9esOA40D25wvUK)
 
 ### Omarchy v1 remains free and open source (MIT).
