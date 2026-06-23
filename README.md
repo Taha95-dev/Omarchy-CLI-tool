@@ -17,9 +17,9 @@ One command to fix PATH issues forever. Works on Windows, macOS, Linux.
 
 ---
 
-### Omarchy v2 (the paid one)
+### Omarchy v2 (the paid one for 25$)
 
-if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 50$ along with quality of features
+if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 25$ along with some quality of life features
 
 **Features:**
 
