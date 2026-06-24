@@ -1,5 +1,20 @@
 ## 💰 Commercial Tools
 
+### Quantum Vim
+
+An Editor with VS Code vibes uses 150MB of RAM and has all the functionality of a popular neovim Distro, just for 10$.
+
+👉 [Buy QuantumVim](https://buy.polar.sh/polar_cl_e7ZaWRsYzDbr17dP5fi8yNEdWUau35AHzPG6X3fM2mA)
+
+Includes:
+- Omarchy integration
+- Startup screen
+- Priority support
+- Lifetime updates
+
+P.S, first 100 customers will get 10% discount buy it now or lose the option for a discount.
+Discount Code: "superposition".
+
 ### Pathfix v2 – Never Fight Your PATH Again
 
 One command to fix PATH issues forever. Works on Windows, macOS, Linux.
@@ -17,7 +32,7 @@ One command to fix PATH issues forever. Works on Windows, macOS, Linux.
 
 ---
 
-### Omarchy v2 (the paid one for 25$)
+### Omarchy v2 (the paid one for 5$)
 
 if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 25$ along with some quality of life features
 
