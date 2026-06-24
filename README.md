@@ -1,19 +1,27 @@
 ## 💰 Commercial Tools
 
-### Quantum Vim
+## ⚡ Quantum Vim – $10
 
-An Editor with VS Code vibes uses 150MB of RAM and has all the functionality of a popular neovim Distro, just for 10$.
+### VS Code Vibes. Neovim Power. Zero Config.
 
-👉 [Buy QuantumVim](https://buy.polar.sh/polar_cl_e7ZaWRsYzDbr17dP5fi8yNEdWUau35AHzPG6X3fM2mA)
+![Quantum Vim Startup](quantum-vim.jpg)
 
-Includes:
-- Omarchy integration
-- Startup screen
-- Priority support
-- Lifetime updates
+**Open it. Start coding. That's it.**
 
-P.S, first 100 customers will get 10% discount buy it now or lose the option for a discount.
-Discount Code: "superposition".
+- **150MB RAM** – Lightweight, not bloated
+- **Stunning startup** – Every time you open it, it feels premium
+- **VS Code vibes** – Familiar feel, terminal speed
+- **All tools included** – LSP, autocomplete, file tree, git integration – ready to go
+
+### Why $10?
+
+- **Save 10+ hours** of configuring Neovim from scratch
+- **Lifetime updates** – never pay again
+- **Priority support** – I'll help you if something breaks
+
+> **Launch Price: $10** – Use code `SUPERPOSITION` for 10% off (first 100 buyers)
+
+**[👉 Buy Quantum Vim Now](https://buy.polar.sh/polar_cl_e7ZaWRsYzDbr17dP5fi8yNEdWUau35AHzPG6X3fM2mA)**
 
 ### Pathfix v2 – Never Fight Your PATH Again
 
