@@ -73,6 +73,8 @@ One-time payment. Lifetime updates.
 
 No subscriptions. No hidden fees.
 
+and also as a bonus, No external dependencies. No PowerShell modules to install. Just tap add and go.
+
 👉 [Buy Omarchy V2](https://buy.polar.sh/polar_cl_zvnuIMcqUEG0ghrgaFfFV9PivHvnI9esOA40D25wvUK)
 
 
