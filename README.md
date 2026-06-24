@@ -36,20 +36,42 @@ One command to fix PATH issues forever. Works on Windows, macOS, Linux.
 
 if you want a cross shell shortcut manager with arguments to make your life easier consider buying omarchy v2 for 25$ along with some quality of life features
 
-**Features:**
+🚀 Omarchy v2 – The $5 Shortcut Manager
+Stop typing long commands. Start using 3-letter shortcuts.
 
-- Add/Remove a shortcut with 
-```bash
-omarchy tap add sync "omarchy sync $1"
+Before Omarchy v2:
+powershell
+# 27 characters just to check your version
+omarchy version
 
-omarchy tap remove sync
-```
+# Every. Single. Time.
+After Omarchy v2:
+powershell
+# One-time setup
+tap add show-version "omarchy version"
+✅ Shortcut added: show-version → omarchy version
 
-**Note:**
+# Now just type:
+show-version
+Omarchy v2.6.0
+That's it. No external tools. No config files. Just shortcuts that work.
 
-in 'omarchy tap add sync "omarchy sync $1"' the '$1' is an argument
+What else can you do?
+Without Omarchy v2	With Omarchy v2 ($5)
+omarchy sync -a	sync
+docker-compose down -v && docker-compose up -d	dbreset
+git add . && git commit -m "quick fix" && git push	push "quick fix"
+ssh deploy-server && cd /var/www && npm run build	deploy
+Create ANY shortcut for ANY command – with arguments.
 
----
+Why $5?
+You'll save minutes every day
+
+That adds up to hours every month
+
+One-time payment. Lifetime updates.
+
+No subscriptions. No hidden fees.
 
 👉 [Buy Omarchy V2](https://buy.polar.sh/polar_cl_zvnuIMcqUEG0ghrgaFfFV9PivHvnI9esOA40D25wvUK)
 
