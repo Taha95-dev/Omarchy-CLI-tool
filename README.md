@@ -231,4 +231,4 @@ Windows Defender may flag `pathfix.exe` as a virus. This is a **false positive**
 
 ---
 
-**Omarchy v1 remains free and open source (MIT).**
+**Omarchy v1 remains free and open source (MIT)**
