@@ -6,7 +6,7 @@
 
 ![Quantum Vim Startup](quantum-vim.jpg)
 
-![A screenshot of task manager](quantum-vim-taskmanager.jpg)
+![A screenshot of task manager](quantum-vim-task-manager.jpg)
 
 **Open it. Start coding. That's it.**
 
