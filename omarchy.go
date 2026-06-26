@@ -22,6 +22,7 @@ import (
 	"omarchy/pkg/support"
 	"omarchy/pkg/templates"
 	"omarchy/pkg/tree"
+	"omarchy/pkg/promo"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -226,6 +227,7 @@ func main() {
 		fmt.Printf("Omarchy %s\n", Version)
 		return
 	}
+	promo.Show()
 	// Define flags with config defaults
 	projectType := flag.String("type", defaultType, "Project type: web, cli, lib, fullstack")
 	backendLang := flag.String("backend", backendType, "Backend language: go, node")
