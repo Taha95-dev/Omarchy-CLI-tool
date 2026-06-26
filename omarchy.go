@@ -1,5 +1,5 @@
 package main
-
+// omarchy v1
 import (
 	"context"
 	"encoding/json"
@@ -278,7 +278,7 @@ func getVersion() string {
 		}
 	}
 	// Fallback to hardcoded (update manually for releases)
-	return "v2.6.0"
+	return "v2.7.0"
 }
 func DockerCleanup(dryRun bool) error {
 	if dryRun {
